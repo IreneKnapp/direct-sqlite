@@ -1,0 +1,22 @@
+name: direct-sqlite
+version: 1.0
+cabal-version: >= 1.2
+build-type: Simple
+license: BSD3
+license-file: LICENSE
+copyright: Copyright (c) 2009 Dan Knapp
+author: Dan Knapp
+maintainer: dankna@gmail.com
+homepage: http://www.dankna.com/software/
+bug-reports: http://www.dankna.com/issues/create/
+category: Database
+synopsis: Low-level binding to SQLite3.  Includes BLOB support.
+description:
+  This package is not very different from the other SQLite3 bindings out there, but
+  it fixes a few deficiencies I was finding.  It is not as complete as bindings-sqlite3,
+  but is slightly higher-level, in that it supports marshalling of data values to and
+  from the database.
+
+Library
+  exposed-modules: Database.SQLite3
+  build-depends: bytestring, base >= 4.1 && < 5, utf8-string >= 0.3.5
