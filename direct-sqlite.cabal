@@ -10,12 +10,13 @@ maintainer: dankna@gmail.com
 homepage: http://www.dankna.com/software/
 bug-reports: http://www.dankna.com/issues/create/
 category: Database
-synopsis: Low-level binding to SQLite3.  Includes BLOB support.
+synopsis: Low-level binding to SQLite3.  Includes UTF8 and BLOB support.
 description:
   This package is not very different from the other SQLite3 bindings out there, but
   it fixes a few deficiencies I was finding.  It is not as complete as bindings-sqlite3,
   but is slightly higher-level, in that it supports marshalling of data values to and
-  from the database.
+  from the database.  In particular, it supports strings encoded as UTF8, and BLOBs
+  represented as ByteStrings.
 
 Library
   exposed-modules: Database.SQLite3
