@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable #-}
 module Database.SQLite3 (
                          Database,
                          Statement,
@@ -31,6 +31,7 @@ module Database.SQLite3 (
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Data.ByteString.UTF8 as UTF8
+import Data.Typeable
 import Foreign
 import Foreign.C
 
@@ -84,7 +85,7 @@ data SQLData = SQLInteger Int64
              | SQLText String
              | SQLBlob BS.ByteString
              | SQLNull
-               deriving (Eq, Show)
+               deriving (Eq, Show, Typeable)
 
 
 encodeError :: Error -> Int
