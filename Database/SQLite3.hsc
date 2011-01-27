@@ -35,7 +35,6 @@ import Data.Typeable
 import Foreign
 import Foreign.C
 
-#include <sqlite3.h>
 
 newtype Database = Database (Ptr ())
 newtype Statement = Statement (Ptr ())
