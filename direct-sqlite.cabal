@@ -1,6 +1,6 @@
 name: direct-sqlite
 version: 1.1
-cabal-version: >= 1.2
+cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -20,6 +20,10 @@ description:
   
   Version 1.1 adds the SQLite amalgamation file (version 3.7.5) to the project, so that
   there are no external dependencies.
+
+Source-Repository head
+  type: darcs
+  location: http://dankna.com/software/darcs/direct-sqlite/
 
 Library
   exposed-modules: Database.SQLite3
