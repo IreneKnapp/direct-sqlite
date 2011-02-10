@@ -20,4 +20,6 @@ description:
 
 Library
   exposed-modules: Database.SQLite3
+  c-sources: sqlite3.c
   build-depends: bytestring, base >= 4.1 && < 5, utf8-string >= 0.3.5
+
