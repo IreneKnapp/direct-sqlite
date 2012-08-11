@@ -18,6 +18,7 @@ data TestEnv =
 tests :: [TestEnv -> Test]
 tests =
     [ TestLabel "Simple" . testSimplest
+    , TestLabel "Params" . testBindParamCounts
     ]
 
 -- Simplest SELECT
@@ -29,6 +30,16 @@ testSimplest TestEnv{..} = TestCase $ do
   Done <- step stmt
   finalize stmt
   assertEqual "1+1" (SQLInteger 2) res
+
+-- Test bindParameterCount
+testBindParamCounts :: TestEnv -> Test
+testBindParamCounts TestEnv{..} = TestCase $ do
+  nParams <- bracket (prepare conn "SELECT $a") finalize bindParameterCount
+  assertEqual "single $a" 1 nParams
+  nParams <- bracket (prepare conn "SELECT (?1+?1+?1+?2+?3)") finalize bindParameterCount
+  assertEqual "3 unique ?NNNs" 3 nParams
+  nParams <- bracket (prepare conn "SELECT (?+?+?)") finalize bindParameterCount
+  assertEqual "3 positional" 3 nParams
 
 -- | Action for connecting to the database that will be used for
 -- testing.
