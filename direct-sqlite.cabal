@@ -1,6 +1,5 @@
 name: direct-sqlite
 version: 1.1.0.1
-faction-version: 1.0
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -11,6 +10,8 @@ homepage: http://ireneknapp.com/software/
 bug-reports: http://ireneknapp.com/issues/create/
 category: Database
 synopsis: Low-level binding to SQLite3.  Includes UTF8 and BLOB support.
+Cabal-version: >= 1.9.2
+Build-type: Simple
 description:
   This package is not very different from the other SQLite3 bindings out there, but
   it fixes a few deficiencies I was finding.  It is not as complete as bindings-sqlite3,
@@ -25,11 +26,32 @@ description:
   there are no external dependencies.
 
 Source-Repository head
-  type: darcs
-  location: http://ireneknapp.com/software/darcs/direct-sqlite/
+  type: git
+  location: git://github.com/IreneKnapp/direct-sqlite.git
 
 Library
   exposed-modules: Database.SQLite3
   c-sources: sqlite3.c
   build-depends: bytestring, base >= 4.1 && < 5, utf8-string >= 0.3.5
   default-language: Haskell2010
+
+
+test-suite test
+  type:           exitcode-stdio-1.0
+
+  hs-source-dirs: test
+  main-is:        Main.hs
+
+  ghc-options: -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind
+
+  extensions: NamedFieldPuns
+            , OverloadedStrings
+            , Rank2Types
+            , RecordWildCards
+
+  build-depends: base
+               , base16-bytestring
+               , bytestring
+               , HUnit
+               , direct-sqlite
+               , text
