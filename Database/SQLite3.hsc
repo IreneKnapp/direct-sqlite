@@ -16,6 +16,7 @@ module Database.SQLite3 (
                          step,
                          reset,
                          finalize,
+                         bindParameterCount,
                          bindBlob,
                          bindDouble,
                          bindInt,
@@ -272,6 +273,15 @@ finalize statement = do
   case error of
     ErrorOK -> return ()
     _ -> sqlError Nothing "finalize" error
+
+
+foreign import ccall "sqlite3_bind_parameter_count"
+  bindParameterCountC :: Ptr () -> IO Int
+
+-- | Find the number SQL parameters in a prepared statement.
+bindParameterCount :: Statement -> IO Int
+bindParameterCount (Statement stmt) = do
+  bindParameterCountC stmt
 
 foreign import ccall "sqlite3_bind_blob"
   bindBlobC :: Ptr () -> Int -> Ptr () -> Int -> Ptr () -> IO Int
