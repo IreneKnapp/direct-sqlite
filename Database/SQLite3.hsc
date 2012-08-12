@@ -17,6 +17,7 @@ module Database.SQLite3 (
                          reset,
                          finalize,
                          bindParameterCount,
+                         bindParameterName,
                          bindBlob,
                          bindDouble,
                          bindInt,
@@ -282,6 +283,25 @@ foreign import ccall "sqlite3_bind_parameter_count"
 bindParameterCount :: Statement -> IO Int
 bindParameterCount (Statement stmt) = do
   bindParameterCountC stmt
+
+maybeNullCString :: CString -> IO (Maybe BS.ByteString)
+maybeNullCString s =
+  if s == nullPtr then return Nothing else fmap Just (BS.packCString s)
+
+foreign import ccall "sqlite3_bind_parameter_name"
+  bindParameterNameC :: Ptr () -> Int -> IO CString
+
+-- | Return the N-th SQL parameter name.
+--
+-- Named parameters are returned as-is.  E.g. \":v\" is returned as
+-- @Just \":v\"@.  Unnamed parameters, however, are converted to
+-- @Nothing@.
+--
+-- Note that the column index starts at 1, not 0.
+bindParameterName :: Statement -> Int -> IO (Maybe String)
+bindParameterName (Statement stmt) colNdx = do
+  mn <- bindParameterNameC stmt colNdx >>= maybeNullCString
+  return (mn >>= return . UTF8.toString)
 
 foreign import ccall "sqlite3_bind_blob"
   bindBlobC :: Ptr () -> Int -> Ptr () -> Int -> Ptr () -> IO Int
