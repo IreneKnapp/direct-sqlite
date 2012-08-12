@@ -19,6 +19,7 @@ tests :: [TestEnv -> Test]
 tests =
     [ TestLabel "Simple" . testSimplest
     , TestLabel "Params" . testBindParamCounts
+    , TestLabel "Params" . testBindParamName
     ]
 
 -- Simplest SELECT
@@ -40,6 +41,22 @@ testBindParamCounts TestEnv{..} = TestCase $ do
   assertEqual "3 unique ?NNNs" 3 nParams
   nParams <- bracket (prepare conn "SELECT (?+?+?)") finalize bindParameterCount
   assertEqual "3 positional" 3 nParams
+
+-- Test bindParameterName
+testBindParamName :: TestEnv -> Test
+testBindParamName TestEnv{..} = TestCase $ do
+  bracket (prepare conn "SELECT :v + :v2") finalize (testNames [Just ":v", Just ":v2"])
+  bracket (prepare conn "SELECT ?1 + ?1") finalize (testNames [Just "?1"])
+  bracket (prepare conn "SELECT ?1 + ?2") finalize (testNames [Just "?1", Just "?2"])
+  bracket (prepare conn "SELECT ? + ?") finalize (testNames [Nothing, Nothing])
+  bracket (prepare conn "SELECT $1 + $2") finalize (testNames [Just "$1", Just "$2"])
+  where
+    testNames names stmt = do
+      count <- bindParameterCount stmt
+      assertEqual "count match" count (length names)
+      mapM_ (\(ndx,expecting) -> do
+                name <- bindParameterName stmt ndx
+                assertEqual "name match" expecting name) $ zip [1..] names
 
 -- | Action for connecting to the database that will be used for
 -- testing.
