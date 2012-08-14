@@ -32,7 +32,8 @@ module Database.SQLite3 (
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
-import qualified Data.ByteString.UTF8 as UTF8
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Typeable
 import Foreign
 import Foreign.C
@@ -83,7 +84,7 @@ data ColumnType = IntegerColumn
 
 data SQLData = SQLInteger Int64
              | SQLFloat Double
-             | SQLText String
+             | SQLText T.Text
              | SQLBlob BS.ByteString
              | SQLNull
                deriving (Eq, Show, Typeable)
@@ -167,7 +168,7 @@ errmsg :: Database -> IO String
 errmsg (Database database) = do
   message <- errmsgC database
   byteString <- BS.packCString message
-  return $ UTF8.toString byteString
+  return $ T.unpack $ T.decodeUtf8 byteString
 
 sqlError :: Maybe Database -> String -> Error -> IO a
 sqlError maybeDatabase functionName error = do
@@ -184,7 +185,7 @@ foreign import ccall "sqlite3_open"
   openC :: CString -> Ptr (Ptr ()) -> IO Int
 openError :: String -> IO (Either Database Error)
 openError path = do
-  BS.useAsCString (UTF8.fromString path)
+  BS.useAsCString (T.encodeUtf8 $ T.pack path)
                   (\path -> do
                      alloca (\database -> do
                                error <- openC path database
@@ -218,7 +219,7 @@ foreign import ccall "sqlite3_prepare_v2"
   prepareC :: Ptr () -> CString -> Int -> Ptr (Ptr ()) -> Ptr (Ptr ()) -> IO Int
 prepareError :: Database -> String -> IO (Either Statement Error)
 prepareError (Database database) text = do
-  BS.useAsCString (UTF8.fromString text)
+  BS.useAsCString (T.encodeUtf8 $ T.pack text)
                   (\text -> do
                      alloca (\statement -> do
                                error <- prepareC database text (-1) statement nullPtr
@@ -301,7 +302,7 @@ foreign import ccall "sqlite3_bind_parameter_name"
 bindParameterName :: Statement -> Int -> IO (Maybe String)
 bindParameterName (Statement stmt) colNdx = do
   mn <- bindParameterNameC stmt colNdx >>= maybeNullCString
-  return (mn >>= return . UTF8.toString)
+  return (mn >>= return . T.unpack . T.decodeUtf8)
 
 foreign import ccall "sqlite3_bind_blob"
   bindBlobC :: Ptr () -> Int -> Ptr () -> Int -> Ptr () -> IO Int
@@ -374,16 +375,16 @@ bindNull statement parameterIndex = do
 
 foreign import ccall "sqlite3_bind_text"
   bindTextC :: Ptr () -> Int -> CString -> Int -> Ptr () -> IO Int
-bindTextError :: Statement -> Int -> String -> IO Error
+bindTextError :: Statement -> Int -> T.Text -> IO Error
 bindTextError (Statement statement) parameterIndex text = do
-  byteString <- return $ UTF8.fromString text
+  byteString <- return $ T.encodeUtf8 text
   size <- return $ BS.length byteString
   BS.useAsCString byteString
                   (\dataC -> do
                      error <- bindTextC statement parameterIndex dataC size
                                         (intPtrToPtr (-1))
                      return $ decodeError error)
-bindText :: Statement -> Int -> String -> IO ()
+bindText :: Statement -> Int -> T.Text -> IO ()
 bindText statement parameterIndex text = do
   error <- bindTextError statement parameterIndex text
   case error of
@@ -437,11 +438,11 @@ columnDouble (Statement statement) columnIndex = do
 
 foreign import ccall "sqlite3_column_text"
   columnTextC :: Ptr () -> Int -> IO CString
-columnText :: Statement -> Int -> IO String
+columnText :: Statement -> Int -> IO T.Text
 columnText (Statement statement) columnIndex = do
   text <- columnTextC statement columnIndex
   byteString <- BS.packCString text
-  return $ UTF8.toString byteString
+  return $ T.decodeUtf8 byteString
 
 foreign import ccall "sqlite3_column_count"
   columnCountC :: Ptr () -> IO Int
