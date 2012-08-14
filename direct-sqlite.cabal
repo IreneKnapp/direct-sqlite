@@ -10,7 +10,7 @@ homepage: http://ireneknapp.com/software/
 bug-reports: http://ireneknapp.com/issues/create/
 category: Database
 synopsis: Low-level binding to SQLite3.  Includes UTF8 and BLOB support.
-Cabal-version: >= 1.9.2
+Cabal-version: >= 1.10
 Build-type: Simple
 description:
   This package is not very different from the other SQLite3 bindings out there, but
