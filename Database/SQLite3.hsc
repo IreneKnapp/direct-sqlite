@@ -361,7 +361,7 @@ bindText statement parameterIndex text = do
 
 bind :: Statement -> [SQLData] -> IO ()
 bind statement sqlData = do
-  mapM (\(parameterIndex, datum) -> do
+  mapM_ (\(parameterIndex, datum) -> do
           case datum of
             SQLInteger int64 -> bindInt64 statement parameterIndex int64
             SQLFloat double -> bindDouble statement parameterIndex double
@@ -369,7 +369,6 @@ bind statement sqlData = do
             SQLBlob blob -> bindBlob statement parameterIndex blob
             SQLNull -> bindNull statement parameterIndex)
        $ zip [1..] sqlData
-  return ()
 
 foreign import ccall "sqlite3_column_type"
   columnTypeC :: Ptr () -> Int -> IO Int
