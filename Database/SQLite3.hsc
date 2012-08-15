@@ -90,38 +90,6 @@ data SQLData = SQLInteger Int64
                deriving (Eq, Show, Typeable)
 
 
-encodeError :: Error -> Int
-encodeError ErrorOK = 0
-encodeError ErrorError = 1
-encodeError ErrorInternal = 2
-encodeError ErrorPermission = 3
-encodeError ErrorAbort = 4
-encodeError ErrorBusy = 5
-encodeError ErrorLocked = 6
-encodeError ErrorNoMemory = 7
-encodeError ErrorReadOnly = 8
-encodeError ErrorInterrupt = 9
-encodeError ErrorIO = 10
-encodeError ErrorCorrupt = 11
-encodeError ErrorNotFound = 12
-encodeError ErrorFull = 13
-encodeError ErrorCan'tOpen = 14
-encodeError ErrorProtocol = 15
-encodeError ErrorEmpty = 16
-encodeError ErrorSchema = 17
-encodeError ErrorTooBig = 18
-encodeError ErrorConstraint = 19
-encodeError ErrorMismatch = 20
-encodeError ErrorMisuse = 21
-encodeError ErrorNoLargeFileSupport = 22
-encodeError ErrorAuthorization = 23
-encodeError ErrorFormat = 24
-encodeError ErrorRange = 25
-encodeError ErrorNotADatabase = 26
-encodeError ErrorRow = 100
-encodeError ErrorDone = 101
-
-
 decodeError :: Int -> Error
 decodeError 0 = ErrorOK
 decodeError 1 = ErrorError
