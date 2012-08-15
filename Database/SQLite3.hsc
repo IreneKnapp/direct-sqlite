@@ -53,8 +53,8 @@ data Error = ErrorOK
            | ErrorReadOnly
            | ErrorInterrupt
            | ErrorIO
-           | ErrorNotFound
            | ErrorCorrupt
+           | ErrorNotFound
            | ErrorFull
            | ErrorCan'tOpen
            | ErrorProtocol
@@ -102,8 +102,8 @@ encodeError ErrorNoMemory = 7
 encodeError ErrorReadOnly = 8
 encodeError ErrorInterrupt = 9
 encodeError ErrorIO = 10
-encodeError ErrorNotFound = 11
-encodeError ErrorCorrupt = 12
+encodeError ErrorCorrupt = 11
+encodeError ErrorNotFound = 12
 encodeError ErrorFull = 13
 encodeError ErrorCan'tOpen = 14
 encodeError ErrorProtocol = 15
@@ -134,8 +134,8 @@ decodeError 7 = ErrorNoMemory
 decodeError 8 = ErrorReadOnly
 decodeError 9 = ErrorInterrupt
 decodeError 10 = ErrorIO
-decodeError 11 = ErrorNotFound
-decodeError 12 = ErrorCorrupt
+decodeError 11 = ErrorCorrupt
+decodeError 12 = ErrorNotFound
 decodeError 13 = ErrorFull
 decodeError 14 = ErrorCan'tOpen
 decodeError 15 = ErrorProtocol
