@@ -95,43 +95,43 @@ data SQLData = SQLInteger Int64
 
 
 decodeError :: Int -> Error
-decodeError 0 = ErrorOK
-decodeError 1 = ErrorError
-decodeError 2 = ErrorInternal
-decodeError 3 = ErrorPermission
-decodeError 4 = ErrorAbort
-decodeError 5 = ErrorBusy
-decodeError 6 = ErrorLocked
-decodeError 7 = ErrorNoMemory
-decodeError 8 = ErrorReadOnly
-decodeError 9 = ErrorInterrupt
-decodeError 10 = ErrorIO
-decodeError 11 = ErrorCorrupt
-decodeError 12 = ErrorNotFound
-decodeError 13 = ErrorFull
-decodeError 14 = ErrorCan'tOpen
-decodeError 15 = ErrorProtocol
-decodeError 16 = ErrorEmpty
-decodeError 17 = ErrorSchema
-decodeError 18 = ErrorTooBig
-decodeError 19 = ErrorConstraint
-decodeError 20 = ErrorMismatch
-decodeError 21 = ErrorMisuse
-decodeError 22 = ErrorNoLargeFileSupport
-decodeError 23 = ErrorAuthorization
-decodeError 24 = ErrorFormat
-decodeError 25 = ErrorRange
-decodeError 26 = ErrorNotADatabase
-decodeError 100 = ErrorRow
-decodeError 101 = ErrorDone
+decodeError #{const SQLITE_OK}         = ErrorOK
+decodeError #{const SQLITE_ERROR}      = ErrorError
+decodeError #{const SQLITE_INTERNAL}   = ErrorInternal
+decodeError #{const SQLITE_PERM}       = ErrorPermission
+decodeError #{const SQLITE_ABORT}      = ErrorAbort
+decodeError #{const SQLITE_BUSY}       = ErrorBusy
+decodeError #{const SQLITE_LOCKED}     = ErrorLocked
+decodeError #{const SQLITE_NOMEM}      = ErrorNoMemory
+decodeError #{const SQLITE_READONLY}   = ErrorReadOnly
+decodeError #{const SQLITE_INTERRUPT}  = ErrorInterrupt
+decodeError #{const SQLITE_IOERR}      = ErrorIO
+decodeError #{const SQLITE_CORRUPT}    = ErrorCorrupt
+decodeError #{const SQLITE_NOTFOUND}   = ErrorNotFound
+decodeError #{const SQLITE_FULL}       = ErrorFull
+decodeError #{const SQLITE_CANTOPEN}   = ErrorCan'tOpen
+decodeError #{const SQLITE_PROTOCOL}   = ErrorProtocol
+decodeError #{const SQLITE_EMPTY}      = ErrorEmpty
+decodeError #{const SQLITE_SCHEMA}     = ErrorSchema
+decodeError #{const SQLITE_TOOBIG}     = ErrorTooBig
+decodeError #{const SQLITE_CONSTRAINT} = ErrorConstraint
+decodeError #{const SQLITE_MISMATCH}   = ErrorMismatch
+decodeError #{const SQLITE_MISUSE}     = ErrorMisuse
+decodeError #{const SQLITE_NOLFS}      = ErrorNoLargeFileSupport
+decodeError #{const SQLITE_AUTH}       = ErrorAuthorization
+decodeError #{const SQLITE_FORMAT}     = ErrorFormat
+decodeError #{const SQLITE_RANGE}      = ErrorRange
+decodeError #{const SQLITE_NOTADB}     = ErrorNotADatabase
+decodeError #{const SQLITE_ROW}        = ErrorRow
+decodeError #{const SQLITE_DONE}       = ErrorDone
 
 
 decodeColumnType :: Int -> ColumnType
-decodeColumnType 1 = IntegerColumn
-decodeColumnType 2 = FloatColumn
-decodeColumnType 3 = TextColumn
-decodeColumnType 4 = BlobColumn
-decodeColumnType 5 = NullColumn
+decodeColumnType #{const SQLITE_INTEGER} = IntegerColumn
+decodeColumnType #{const SQLITE_FLOAT}   = FloatColumn
+decodeColumnType #{const SQLITE_TEXT}    = TextColumn
+decodeColumnType #{const SQLITE_BLOB}    = BlobColumn
+decodeColumnType #{const SQLITE_NULL}    = NullColumn
 
 
 foreign import ccall "sqlite3_errmsg"
