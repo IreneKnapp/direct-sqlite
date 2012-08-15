@@ -42,35 +42,37 @@ import Foreign.C
 newtype Database = Database (Ptr ())
 newtype Statement = Statement (Ptr ())
 
-data Error = ErrorOK
-           | ErrorError
-           | ErrorInternal
-           | ErrorPermission
-           | ErrorAbort
-           | ErrorBusy
-           | ErrorLocked
-           | ErrorNoMemory
-           | ErrorReadOnly
-           | ErrorInterrupt
-           | ErrorIO
-           | ErrorCorrupt
-           | ErrorNotFound
-           | ErrorFull
-           | ErrorCan'tOpen
-           | ErrorProtocol
-           | ErrorEmpty
-           | ErrorSchema
-           | ErrorTooBig
-           | ErrorConstraint
-           | ErrorMismatch
-           | ErrorMisuse
-           | ErrorNoLargeFileSupport
-           | ErrorAuthorization
-           | ErrorFormat
-           | ErrorRange
-           | ErrorNotADatabase
-           | ErrorRow
-           | ErrorDone
+-- Result code documentation copied from <http://www.sqlite.org/c3ref/c_abort.html>
+
+data Error = ErrorOK                     -- ^ Successful result
+           | ErrorError                  -- ^ SQL error or missing database
+           | ErrorInternal               -- ^ Internal logic error in SQLite
+           | ErrorPermission             -- ^ Access permission denied
+           | ErrorAbort                  -- ^ Callback routine requested an abort
+           | ErrorBusy                   -- ^ The database file is locked
+           | ErrorLocked                 -- ^ A table in the database is locked
+           | ErrorNoMemory               -- ^ A @malloc()@ failed
+           | ErrorReadOnly               -- ^ Attempt to write a readonly database
+           | ErrorInterrupt              -- ^ Operation terminated by @sqlite3_interrupt()@
+           | ErrorIO                     -- ^ Some kind of disk I/O error occurred
+           | ErrorCorrupt                -- ^ The database disk image is malformed
+           | ErrorNotFound               -- ^ Unknown opcode in @sqlite3_file_control()@
+           | ErrorFull                   -- ^ Insertion failed because database is full
+           | ErrorCan'tOpen              -- ^ Unable to open the database file
+           | ErrorProtocol               -- ^ Database lock protocol error
+           | ErrorEmpty                  -- ^ Database is empty
+           | ErrorSchema                 -- ^ The database schema changed
+           | ErrorTooBig                 -- ^ String or BLOB exceeds size limit
+           | ErrorConstraint             -- ^ Abort due to constraint violation
+           | ErrorMismatch               -- ^ Data type mismatch
+           | ErrorMisuse                 -- ^ Library used incorrectly
+           | ErrorNoLargeFileSupport     -- ^ Uses OS features not supported on host
+           | ErrorAuthorization          -- ^ Authorization denied
+           | ErrorFormat                 -- ^ Auxiliary database format error
+           | ErrorRange                  -- ^ 2nd parameter to sqlite3_bind out of range
+           | ErrorNotADatabase           -- ^ File opened that is not a database file
+           | ErrorRow                    -- ^ @sqlite3_step()@ has another row ready
+           | ErrorDone                   -- ^ @sqlite3_step()@ has finished executing
              deriving (Eq, Show)
 
 data StepResult = Row | Done deriving (Eq, Show)
