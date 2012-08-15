@@ -30,6 +30,8 @@ module Database.SQLite3 (
                         )
     where
 
+#include "sqlite3.h"
+
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Data.Text as T

@@ -27,6 +27,10 @@ description:
   Version 1.1 adds the SQLite amalgamation file (version 3.7.5) to the project, so that
   there are no external dependencies.
 
+extra-source-files:
+  sqlite3.c
+  sqlite3.h
+
 Source-Repository head
   type: git
   location: git://github.com/IreneKnapp/direct-sqlite.git
