@@ -106,8 +106,8 @@ data CDestructor
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 
-newtype CError = CError CInt
 
+newtype CError = CError CInt
 
 decodeError :: CError -> Error
 decodeError (CError n) = case n of
@@ -142,12 +142,15 @@ decodeError (CError n) = case n of
     #{const SQLITE_DONE}       -> ErrorDone
 
 
-decodeColumnType :: Int -> ColumnType
-decodeColumnType #{const SQLITE_INTEGER} = IntegerColumn
-decodeColumnType #{const SQLITE_FLOAT}   = FloatColumn
-decodeColumnType #{const SQLITE_TEXT}    = TextColumn
-decodeColumnType #{const SQLITE_BLOB}    = BlobColumn
-decodeColumnType #{const SQLITE_NULL}    = NullColumn
+newtype CColumnType = CColumnType CInt
+
+decodeColumnType :: CColumnType -> ColumnType
+decodeColumnType (CColumnType n) = case n of
+    #{const SQLITE_INTEGER} -> IntegerColumn
+    #{const SQLITE_FLOAT}   -> FloatColumn
+    #{const SQLITE_TEXT}    -> TextColumn
+    #{const SQLITE_BLOB}    -> BlobColumn
+    #{const SQLITE_NULL}    -> NullColumn
 
 
 foreign import ccall "sqlite3_errmsg"
@@ -402,7 +405,7 @@ bind statement sqlData = do
        $ zip [1..] sqlData
 
 foreign import ccall "sqlite3_column_type"
-  columnTypeC :: Ptr CStatement -> Int -> IO Int
+  columnTypeC :: Ptr CStatement -> Int -> IO CColumnType
 columnType :: Statement -> Int -> IO ColumnType
 columnType (Statement statement) columnIndex = do
   result <- columnTypeC statement columnIndex
