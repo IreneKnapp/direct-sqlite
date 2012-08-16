@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# OPTIONS -fno-warn-name-shadowing #-}
 module Database.SQLite3 (
                          Database,
                          Statement,
@@ -34,6 +35,8 @@ module Database.SQLite3 (
 
 #include "sqlite3.h"
 
+import Prelude hiding (error)
+import qualified Prelude
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Data.Text as T
@@ -140,6 +143,7 @@ decodeError (CError n) = case n of
     #{const SQLITE_NOTADB}     -> ErrorNotADatabase
     #{const SQLITE_ROW}        -> ErrorRow
     #{const SQLITE_DONE}       -> ErrorDone
+    _                          -> Prelude.error $ "decodeError " ++ show n
 
 
 newtype CColumnType = CColumnType CInt
@@ -151,6 +155,7 @@ decodeColumnType (CColumnType n) = case n of
     #{const SQLITE_TEXT}    -> TextColumn
     #{const SQLITE_BLOB}    -> BlobColumn
     #{const SQLITE_NULL}    -> NullColumn
+    _                       -> Prelude.error $ "decodeColumnType " ++ show n
 
 
 foreign import ccall "sqlite3_errmsg"
