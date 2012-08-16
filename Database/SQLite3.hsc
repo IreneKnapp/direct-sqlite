@@ -106,37 +106,40 @@ data CDestructor
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 
+newtype CError = CError CInt
 
-decodeError :: Int -> Error
-decodeError #{const SQLITE_OK}         = ErrorOK
-decodeError #{const SQLITE_ERROR}      = ErrorError
-decodeError #{const SQLITE_INTERNAL}   = ErrorInternal
-decodeError #{const SQLITE_PERM}       = ErrorPermission
-decodeError #{const SQLITE_ABORT}      = ErrorAbort
-decodeError #{const SQLITE_BUSY}       = ErrorBusy
-decodeError #{const SQLITE_LOCKED}     = ErrorLocked
-decodeError #{const SQLITE_NOMEM}      = ErrorNoMemory
-decodeError #{const SQLITE_READONLY}   = ErrorReadOnly
-decodeError #{const SQLITE_INTERRUPT}  = ErrorInterrupt
-decodeError #{const SQLITE_IOERR}      = ErrorIO
-decodeError #{const SQLITE_CORRUPT}    = ErrorCorrupt
-decodeError #{const SQLITE_NOTFOUND}   = ErrorNotFound
-decodeError #{const SQLITE_FULL}       = ErrorFull
-decodeError #{const SQLITE_CANTOPEN}   = ErrorCan'tOpen
-decodeError #{const SQLITE_PROTOCOL}   = ErrorProtocol
-decodeError #{const SQLITE_EMPTY}      = ErrorEmpty
-decodeError #{const SQLITE_SCHEMA}     = ErrorSchema
-decodeError #{const SQLITE_TOOBIG}     = ErrorTooBig
-decodeError #{const SQLITE_CONSTRAINT} = ErrorConstraint
-decodeError #{const SQLITE_MISMATCH}   = ErrorMismatch
-decodeError #{const SQLITE_MISUSE}     = ErrorMisuse
-decodeError #{const SQLITE_NOLFS}      = ErrorNoLargeFileSupport
-decodeError #{const SQLITE_AUTH}       = ErrorAuthorization
-decodeError #{const SQLITE_FORMAT}     = ErrorFormat
-decodeError #{const SQLITE_RANGE}      = ErrorRange
-decodeError #{const SQLITE_NOTADB}     = ErrorNotADatabase
-decodeError #{const SQLITE_ROW}        = ErrorRow
-decodeError #{const SQLITE_DONE}       = ErrorDone
+
+decodeError :: CError -> Error
+decodeError (CError n) = case n of
+    #{const SQLITE_OK}         -> ErrorOK
+    #{const SQLITE_ERROR}      -> ErrorError
+    #{const SQLITE_INTERNAL}   -> ErrorInternal
+    #{const SQLITE_PERM}       -> ErrorPermission
+    #{const SQLITE_ABORT}      -> ErrorAbort
+    #{const SQLITE_BUSY}       -> ErrorBusy
+    #{const SQLITE_LOCKED}     -> ErrorLocked
+    #{const SQLITE_NOMEM}      -> ErrorNoMemory
+    #{const SQLITE_READONLY}   -> ErrorReadOnly
+    #{const SQLITE_INTERRUPT}  -> ErrorInterrupt
+    #{const SQLITE_IOERR}      -> ErrorIO
+    #{const SQLITE_CORRUPT}    -> ErrorCorrupt
+    #{const SQLITE_NOTFOUND}   -> ErrorNotFound
+    #{const SQLITE_FULL}       -> ErrorFull
+    #{const SQLITE_CANTOPEN}   -> ErrorCan'tOpen
+    #{const SQLITE_PROTOCOL}   -> ErrorProtocol
+    #{const SQLITE_EMPTY}      -> ErrorEmpty
+    #{const SQLITE_SCHEMA}     -> ErrorSchema
+    #{const SQLITE_TOOBIG}     -> ErrorTooBig
+    #{const SQLITE_CONSTRAINT} -> ErrorConstraint
+    #{const SQLITE_MISMATCH}   -> ErrorMismatch
+    #{const SQLITE_MISUSE}     -> ErrorMisuse
+    #{const SQLITE_NOLFS}      -> ErrorNoLargeFileSupport
+    #{const SQLITE_AUTH}       -> ErrorAuthorization
+    #{const SQLITE_FORMAT}     -> ErrorFormat
+    #{const SQLITE_RANGE}      -> ErrorRange
+    #{const SQLITE_NOTADB}     -> ErrorNotADatabase
+    #{const SQLITE_ROW}        -> ErrorRow
+    #{const SQLITE_DONE}       -> ErrorDone
 
 
 decodeColumnType :: Int -> ColumnType
@@ -167,7 +170,7 @@ sqlError maybeDatabase functionName error = do
          ++ details
 
 foreign import ccall "sqlite3_open"
-  openC :: CString -> Ptr (Ptr CDatabase) -> IO Int
+  openC :: CString -> Ptr (Ptr CDatabase) -> IO CError
 openError :: String -> IO (Either Database Error)
 openError path = do
   BS.useAsCString (T.encodeUtf8 $ T.pack path)
@@ -188,7 +191,7 @@ open path = do
     Right error -> sqlError Nothing ("open " ++ show path) error
 
 foreign import ccall "sqlite3_close"
-  closeC :: Ptr CDatabase -> IO Int
+  closeC :: Ptr CDatabase -> IO CError
 closeError :: Database -> IO Error
 closeError (Database database) = do
   error <- closeC database
@@ -206,7 +209,7 @@ foreign import ccall "sqlite3_prepare_v2"
            -> Int                   -- ^ Maximum length of zSql in bytes.
            -> Ptr (Ptr CStatement)  -- ^ OUT: Statement handle
            -> Ptr CString           -- ^ OUT: Pointer to unused portion of zSql
-           -> IO Int
+           -> IO CError
 prepareError :: Database -> String -> IO (Either Statement Error)
 prepareError (Database database) text = do
   BS.useAsCString (T.encodeUtf8 $ T.pack text)
@@ -227,7 +230,7 @@ prepare database text = do
     Right error -> sqlError (Just database) ("prepare " ++ (show text)) error
 
 foreign import ccall "sqlite3_step"
-  stepC :: Ptr CStatement -> IO Int
+  stepC :: Ptr CStatement -> IO CError
 stepError :: Statement -> IO Error
 stepError (Statement statement) = do
   error <- stepC statement
@@ -241,7 +244,7 @@ step statement = do
     _ -> sqlError Nothing "step" error
 
 foreign import ccall "sqlite3_reset"
-  resetC :: Ptr CStatement -> IO Int
+  resetC :: Ptr CStatement -> IO CError
 resetError :: Statement -> IO Error
 resetError (Statement statement) = do
   error <- resetC statement
@@ -254,7 +257,7 @@ reset statement = do
     _ -> sqlError Nothing "reset" error
 
 foreign import ccall "sqlite3_finalize"
-  finalizeC :: Ptr CStatement -> IO Int
+  finalizeC :: Ptr CStatement -> IO CError
 finalizeError :: Statement -> IO Error
 finalizeError (Statement statement) = do
   error <- finalizeC statement
@@ -301,7 +304,7 @@ foreign import ccall "sqlite3_bind_blob"
                                 --   C type: void *ptr
             -> Int              -- ^ Length, in bytes
             -> Ptr CDestructor
-            -> IO Int
+            -> IO CError
 bindBlobError :: Statement -> Int -> BS.ByteString -> IO Error
 bindBlobError (Statement statement) parameterIndex byteString = do
   size <- return $ BS.length byteString
@@ -318,7 +321,7 @@ bindBlob statement parameterIndex byteString = do
     _ -> sqlError Nothing "bind blob" error
 
 foreign import ccall "sqlite3_bind_double"
-  bindDoubleC :: Ptr CStatement -> Int -> Double -> IO Int
+  bindDoubleC :: Ptr CStatement -> Int -> Double -> IO CError
 bindDoubleError :: Statement -> Int -> Double -> IO Error
 bindDoubleError (Statement statement) parameterIndex datum = do
   error <- bindDoubleC statement parameterIndex datum
@@ -331,7 +334,7 @@ bindDouble statement parameterIndex datum = do
     _ -> sqlError Nothing "bind double" error
 
 foreign import ccall "sqlite3_bind_int"
-  bindIntC :: Ptr CStatement -> Int -> Int -> IO Int
+  bindIntC :: Ptr CStatement -> Int -> Int -> IO CError
 bindIntError :: Statement -> Int -> Int -> IO Error
 bindIntError (Statement statement) parameterIndex datum = do
   error <- bindIntC statement parameterIndex datum
@@ -344,7 +347,7 @@ bindInt statement parameterIndex datum = do
     _ -> sqlError Nothing "bind int" error
 
 foreign import ccall "sqlite3_bind_int64"
-  bindInt64C :: Ptr CStatement -> Int -> Int64 -> IO Int
+  bindInt64C :: Ptr CStatement -> Int -> Int64 -> IO CError
 bindInt64Error :: Statement -> Int -> Int64 -> IO Error
 bindInt64Error (Statement statement) parameterIndex datum = do
   error <- bindInt64C statement parameterIndex datum
@@ -357,7 +360,7 @@ bindInt64 statement parameterIndex datum = do
     _ -> sqlError Nothing "bind int64" error
 
 foreign import ccall "sqlite3_bind_null"
-  bindNullC :: Ptr CStatement -> Int -> IO Int
+  bindNullC :: Ptr CStatement -> Int -> IO CError
 bindNullError :: Statement -> Int -> IO Error
 bindNullError (Statement statement) parameterIndex = do
   error <- bindNullC statement parameterIndex
@@ -370,7 +373,7 @@ bindNull statement parameterIndex = do
     _ -> sqlError Nothing "bind null" error
 
 foreign import ccall "sqlite3_bind_text"
-  bindTextC :: Ptr CStatement -> Int -> CString -> Int -> Ptr CDestructor -> IO Int
+  bindTextC :: Ptr CStatement -> Int -> CString -> Int -> Ptr CDestructor -> IO CError
 bindTextError :: Statement -> Int -> T.Text -> IO Error
 bindTextError (Statement statement) parameterIndex text = do
   byteString <- return $ T.encodeUtf8 text
