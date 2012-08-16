@@ -1,4 +1,6 @@
-{-# LANGUAGE ForeignFunctionInterface, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Database.SQLite3 (
                          Database,
                          Statement,
@@ -41,8 +43,8 @@ import Foreign
 import Foreign.C
 
 
-newtype Database = Database (Ptr ())
-newtype Statement = Statement (Ptr ())
+newtype Database  = Database  (Ptr CDatabase)
+newtype Statement = Statement (Ptr CStatement)
 
 -- Result code documentation copied from <http://www.sqlite.org/c3ref/c_abort.html>
 
@@ -94,6 +96,17 @@ data SQLData = SQLInteger Int64
                deriving (Eq, Show, Typeable)
 
 
+data CDatabase  -- sqlite3
+data CStatement -- sqlite3_stmt
+
+-- Ptr CDestructor = sqlite3_destructor_type.
+-- See http://www.sqlite.org/c3ref/c_static.html
+data CDestructor
+
+c_SQLITE_TRANSIENT :: Ptr CDestructor
+c_SQLITE_TRANSIENT = intPtrToPtr (-1)
+
+
 decodeError :: Int -> Error
 decodeError #{const SQLITE_OK}         = ErrorOK
 decodeError #{const SQLITE_ERROR}      = ErrorError
@@ -135,7 +148,7 @@ decodeColumnType #{const SQLITE_NULL}    = NullColumn
 
 
 foreign import ccall "sqlite3_errmsg"
-  errmsgC :: Ptr () -> IO CString
+  errmsgC :: Ptr CDatabase -> IO CString
 errmsg :: Database -> IO String
 errmsg (Database database) = do
   message <- errmsgC database
@@ -154,7 +167,7 @@ sqlError maybeDatabase functionName error = do
          ++ details
 
 foreign import ccall "sqlite3_open"
-  openC :: CString -> Ptr (Ptr ()) -> IO Int
+  openC :: CString -> Ptr (Ptr CDatabase) -> IO Int
 openError :: String -> IO (Either Database Error)
 openError path = do
   BS.useAsCString (T.encodeUtf8 $ T.pack path)
@@ -175,7 +188,7 @@ open path = do
     Right error -> sqlError Nothing ("open " ++ show path) error
 
 foreign import ccall "sqlite3_close"
-  closeC :: Ptr () -> IO Int
+  closeC :: Ptr CDatabase -> IO Int
 closeError :: Database -> IO Error
 closeError (Database database) = do
   error <- closeC database
@@ -188,7 +201,12 @@ close database = do
     _ -> sqlError (Just database) "close" error
 
 foreign import ccall "sqlite3_prepare_v2"
-  prepareC :: Ptr () -> CString -> Int -> Ptr (Ptr ()) -> Ptr (Ptr ()) -> IO Int
+  prepareC :: Ptr CDatabase         -- ^ Database handle
+           -> CString               -- ^ SQL statement, UTF-8 encoded
+           -> Int                   -- ^ Maximum length of zSql in bytes.
+           -> Ptr (Ptr CStatement)  -- ^ OUT: Statement handle
+           -> Ptr CString           -- ^ OUT: Pointer to unused portion of zSql
+           -> IO Int
 prepareError :: Database -> String -> IO (Either Statement Error)
 prepareError (Database database) text = do
   BS.useAsCString (T.encodeUtf8 $ T.pack text)
@@ -209,7 +227,7 @@ prepare database text = do
     Right error -> sqlError (Just database) ("prepare " ++ (show text)) error
 
 foreign import ccall "sqlite3_step"
-  stepC :: Ptr () -> IO Int
+  stepC :: Ptr CStatement -> IO Int
 stepError :: Statement -> IO Error
 stepError (Statement statement) = do
   error <- stepC statement
@@ -223,7 +241,7 @@ step statement = do
     _ -> sqlError Nothing "step" error
 
 foreign import ccall "sqlite3_reset"
-  resetC :: Ptr () -> IO Int
+  resetC :: Ptr CStatement -> IO Int
 resetError :: Statement -> IO Error
 resetError (Statement statement) = do
   error <- resetC statement
@@ -236,7 +254,7 @@ reset statement = do
     _ -> sqlError Nothing "reset" error
 
 foreign import ccall "sqlite3_finalize"
-  finalizeC :: Ptr () -> IO Int
+  finalizeC :: Ptr CStatement -> IO Int
 finalizeError :: Statement -> IO Error
 finalizeError (Statement statement) = do
   error <- finalizeC statement
@@ -250,7 +268,7 @@ finalize statement = do
 
 
 foreign import ccall "sqlite3_bind_parameter_count"
-  bindParameterCountC :: Ptr () -> IO Int
+  bindParameterCountC :: Ptr CStatement -> IO Int
 
 -- | Find the number SQL parameters in a prepared statement.
 bindParameterCount :: Statement -> IO Int
@@ -262,7 +280,7 @@ maybeNullCString s =
   if s == nullPtr then return Nothing else fmap Just (BS.packCString s)
 
 foreign import ccall "sqlite3_bind_parameter_name"
-  bindParameterNameC :: Ptr () -> Int -> IO CString
+  bindParameterNameC :: Ptr CStatement -> Int -> IO CString
 
 -- | Return the N-th SQL parameter name.
 --
@@ -277,14 +295,20 @@ bindParameterName (Statement stmt) colNdx = do
   return (mn >>= return . T.unpack . T.decodeUtf8)
 
 foreign import ccall "sqlite3_bind_blob"
-  bindBlobC :: Ptr () -> Int -> Ptr () -> Int -> Ptr () -> IO Int
+  bindBlobC :: Ptr CStatement
+            -> Int              -- ^ Index of the SQL parameter to be set
+            -> Ptr ()           -- ^ Value to bind to the parameter.
+                                --   C type: void *ptr
+            -> Int              -- ^ Length, in bytes
+            -> Ptr CDestructor
+            -> IO Int
 bindBlobError :: Statement -> Int -> BS.ByteString -> IO Error
 bindBlobError (Statement statement) parameterIndex byteString = do
   size <- return $ BS.length byteString
   BS.useAsCString byteString
                   (\dataC -> do
                      error <- bindBlobC statement parameterIndex (castPtr dataC) size
-                                        (intPtrToPtr (-1))
+                                        c_SQLITE_TRANSIENT
                      return $ decodeError error)
 bindBlob :: Statement -> Int -> BS.ByteString -> IO ()
 bindBlob statement parameterIndex byteString = do
@@ -294,7 +318,7 @@ bindBlob statement parameterIndex byteString = do
     _ -> sqlError Nothing "bind blob" error
 
 foreign import ccall "sqlite3_bind_double"
-  bindDoubleC :: Ptr () -> Int -> Double -> IO Int
+  bindDoubleC :: Ptr CStatement -> Int -> Double -> IO Int
 bindDoubleError :: Statement -> Int -> Double -> IO Error
 bindDoubleError (Statement statement) parameterIndex datum = do
   error <- bindDoubleC statement parameterIndex datum
@@ -307,7 +331,7 @@ bindDouble statement parameterIndex datum = do
     _ -> sqlError Nothing "bind double" error
 
 foreign import ccall "sqlite3_bind_int"
-  bindIntC :: Ptr () -> Int -> Int -> IO Int
+  bindIntC :: Ptr CStatement -> Int -> Int -> IO Int
 bindIntError :: Statement -> Int -> Int -> IO Error
 bindIntError (Statement statement) parameterIndex datum = do
   error <- bindIntC statement parameterIndex datum
@@ -320,7 +344,7 @@ bindInt statement parameterIndex datum = do
     _ -> sqlError Nothing "bind int" error
 
 foreign import ccall "sqlite3_bind_int64"
-  bindInt64C :: Ptr () -> Int -> Int64 -> IO Int
+  bindInt64C :: Ptr CStatement -> Int -> Int64 -> IO Int
 bindInt64Error :: Statement -> Int -> Int64 -> IO Error
 bindInt64Error (Statement statement) parameterIndex datum = do
   error <- bindInt64C statement parameterIndex datum
@@ -333,7 +357,7 @@ bindInt64 statement parameterIndex datum = do
     _ -> sqlError Nothing "bind int64" error
 
 foreign import ccall "sqlite3_bind_null"
-  bindNullC :: Ptr () -> Int -> IO Int
+  bindNullC :: Ptr CStatement -> Int -> IO Int
 bindNullError :: Statement -> Int -> IO Error
 bindNullError (Statement statement) parameterIndex = do
   error <- bindNullC statement parameterIndex
@@ -346,7 +370,7 @@ bindNull statement parameterIndex = do
     _ -> sqlError Nothing "bind null" error
 
 foreign import ccall "sqlite3_bind_text"
-  bindTextC :: Ptr () -> Int -> CString -> Int -> Ptr () -> IO Int
+  bindTextC :: Ptr CStatement -> Int -> CString -> Int -> Ptr CDestructor -> IO Int
 bindTextError :: Statement -> Int -> T.Text -> IO Error
 bindTextError (Statement statement) parameterIndex text = do
   byteString <- return $ T.encodeUtf8 text
@@ -354,7 +378,7 @@ bindTextError (Statement statement) parameterIndex text = do
   BS.useAsCString byteString
                   (\dataC -> do
                      error <- bindTextC statement parameterIndex dataC size
-                                        (intPtrToPtr (-1))
+                                        c_SQLITE_TRANSIENT
                      return $ decodeError error)
 bindText :: Statement -> Int -> T.Text -> IO ()
 bindText statement parameterIndex text = do
@@ -375,17 +399,17 @@ bind statement sqlData = do
        $ zip [1..] sqlData
 
 foreign import ccall "sqlite3_column_type"
-  columnTypeC :: Ptr () -> Int -> IO Int
+  columnTypeC :: Ptr CStatement -> Int -> IO Int
 columnType :: Statement -> Int -> IO ColumnType
 columnType (Statement statement) columnIndex = do
   result <- columnTypeC statement columnIndex
   return $ decodeColumnType result
 
 foreign import ccall "sqlite3_column_bytes"
-  columnBytesC :: Ptr () -> Int -> IO Int
+  columnBytesC :: Ptr CStatement -> Int -> IO Int
 
 foreign import ccall "sqlite3_column_blob"
-  columnBlobC :: Ptr () -> Int -> IO (Ptr ())
+  columnBlobC :: Ptr CStatement -> Int -> IO (Ptr ())
 columnBlob :: Statement -> Int -> IO BS.ByteString
 columnBlob (Statement statement) columnIndex = do
   size <- columnBytesC statement columnIndex
@@ -396,19 +420,19 @@ columnBlob (Statement statement) columnIndex = do
                         else return ())
 
 foreign import ccall "sqlite3_column_int64"
-  columnInt64C :: Ptr () -> Int -> IO Int64
+  columnInt64C :: Ptr CStatement -> Int -> IO Int64
 columnInt64 :: Statement -> Int -> IO Int64
 columnInt64 (Statement statement) columnIndex = do
   columnInt64C statement columnIndex
 
 foreign import ccall "sqlite3_column_double"
-  columnDoubleC :: Ptr () -> Int -> IO Double
+  columnDoubleC :: Ptr CStatement -> Int -> IO Double
 columnDouble :: Statement -> Int -> IO Double
 columnDouble (Statement statement) columnIndex = do
   columnDoubleC statement columnIndex
 
 foreign import ccall "sqlite3_column_text"
-  columnTextC :: Ptr () -> Int -> IO CString
+  columnTextC :: Ptr CStatement -> Int -> IO CString
 columnText :: Statement -> Int -> IO T.Text
 columnText (Statement statement) columnIndex = do
   text <- columnTextC statement columnIndex
@@ -416,7 +440,7 @@ columnText (Statement statement) columnIndex = do
   return $ T.decodeUtf8 byteString
 
 foreign import ccall "sqlite3_column_count"
-  columnCountC :: Ptr () -> IO Int
+  columnCountC :: Ptr CStatement -> IO Int
 columnCount :: Statement -> IO Int
 columnCount (Statement statement) = do
   columnCountC statement
