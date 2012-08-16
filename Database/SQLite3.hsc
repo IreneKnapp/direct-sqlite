@@ -36,6 +36,7 @@ module Database.SQLite3 (
 #include "sqlite3.h"
 
 import Prelude hiding (error)
+import Control.Monad
 import qualified Prelude
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
@@ -400,6 +401,10 @@ bindText statement parameterIndex text = do
 
 bind :: Statement -> [SQLData] -> IO ()
 bind statement sqlData = do
+  nParams <- bindParameterCount statement
+  when (nParams /= length sqlData) $
+    fail ("mismatched parameter count for bind.  Prepared statement "++
+          "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
   mapM_ (\(parameterIndex, datum) -> do
           case datum of
             SQLInteger int64 -> bindInt64 statement parameterIndex int64
