@@ -36,7 +36,10 @@ Source-Repository head
   location: git://github.com/IreneKnapp/direct-sqlite.git
 
 Library
-  exposed-modules: Database.SQLite3
+  exposed-modules:
+    Database.SQLite3
+    Database.SQLite3.Bindings
+    Database.SQLite3.Bindings.Types
   c-sources: sqlite3.c
   build-depends: base >= 4.1 && < 5,
                  bytestring >= 0.9.2.1 && < 1,
