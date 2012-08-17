@@ -198,7 +198,7 @@ maybeNullCString s =
 -- @Just \":v\"@.  Unnamed parameters, however, are converted to
 -- @Nothing@.
 --
--- Note that the column index starts at 1, not 0.
+-- Note that the parameter index starts at 1, not 0.
 bindParameterName :: Statement -> Int -> IO (Maybe String)
 bindParameterName (Statement stmt) idx = do
   mn <- c_sqlite3_bind_parameter_name stmt (toCParamIndex idx) >>= maybeNullCString
