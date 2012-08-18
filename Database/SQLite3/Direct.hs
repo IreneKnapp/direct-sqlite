@@ -173,53 +173,61 @@ finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
 
 bindParameterCount :: Statement -> IO ParamIndex
-bindParameterCount = undefined
+bindParameterCount (Statement stmt) =
+    c_sqlite3_bind_parameter_count stmt
 
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
-bindParameterName = undefined
+bindParameterName (Statement stmt) idx = do
+    cstr <- c_sqlite3_bind_parameter_name stmt idx
+    if cstr == nullPtr
+        then return Nothing
+        else Just <$> packUtf8 cstr
 
 columnCount :: Statement -> IO ColumnCount
-columnCount = undefined
+columnCount (Statement stmt) =
+    c_sqlite3_column_count stmt
 
-bind :: Statement -> ParamIndex -> SQLData -> IO ()
-bind = undefined
+bindInt64 :: Statement -> ParamIndex -> Int64 -> IO (Result ())
+bindInt64 (Statement stmt) idx value =
+    toResult () <$> c_sqlite3_bind_int64 stmt idx value
 
-binds :: Statement -> [SQLData] -> IO ()
-binds = undefined
-
-bindInt64 :: Statement -> Int -> Int64 -> IO ()
-bindInt64 = undefined
-
-bindDouble :: Statement -> Int -> Double -> IO ()
+bindDouble :: Statement -> ParamIndex -> Double -> IO (Result ())
 bindDouble = undefined
 
-bindText :: Statement -> Int -> Utf8 -> IO ()
+bindText :: Statement -> ParamIndex -> Utf8 -> IO (Result ())
 bindText = undefined
 
-bindBlob :: Statement -> Int -> ByteString -> IO ()
+bindBlob :: Statement -> ParamIndex -> ByteString -> IO (Result ())
 bindBlob = undefined
 
-bindNull :: Statement -> Int -> IO ()
+bindNull :: Statement -> ParamIndex -> IO (Result ())
 bindNull = undefined
 
 
-column :: Statement -> Int -> IO SQLData
+columnType :: Statement -> ColumnIndex -> IO ColumnType
+columnType = undefined
+
+columnInt64 :: Statement -> ColumnIndex -> IO Int64
+columnInt64 = undefined
+
+columnDouble :: Statement -> ColumnIndex -> IO Double
+columnDouble = undefined
+
+columnText :: Statement -> ColumnIndex -> IO Utf8
+columnText = undefined
+
+columnBlob :: Statement -> ColumnIndex -> IO ByteString
+columnBlob = undefined
+
+
+bind :: Statement -> ParamIndex -> SQLData -> IO (Result ())
+bind = undefined
+
+column :: Statement -> ColumnIndex -> IO SQLData
 column = undefined
+
+binds :: Statement -> [SQLData] -> IO (Result ())
+binds = undefined
 
 columns :: Statement -> IO [SQLData]
 columns = undefined
-
-columnType :: Statement -> Int -> IO ColumnType
-columnType = undefined
-
-columnInt64 :: Statement -> Int -> IO Int64
-columnInt64 = undefined
-
-columnDouble :: Statement -> Int -> IO Double
-columnDouble = undefined
-
-columnText :: Statement -> Int -> IO Utf8
-columnText = undefined
-
-columnBlob :: Statement -> Int -> IO ByteString
-columnBlob = undefined
