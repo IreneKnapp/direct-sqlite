@@ -1,4 +1,5 @@
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Database.SQLite3.Bindings.Types (
     -- * Objects
     -- | <http://www.sqlite.org/c3ref/objlist.html>
@@ -99,20 +100,20 @@ data CStatement
 --
 -- Parameter indices start from 1.
 newtype ParamIndex = ParamIndex CInt
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 -- | Index of a column in a result set.
 --
 -- Column indices start from 0.
 newtype ColumnIndex = ColumnIndex CInt
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 -- | Number of columns in a result set.
 newtype ColumnCount = ColumnCount CInt
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 newtype CNumBytes = CNumBytes CInt
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 fromParamIndex :: Num a => ParamIndex -> a
 fromParamIndex (ParamIndex n) = fromIntegral n
