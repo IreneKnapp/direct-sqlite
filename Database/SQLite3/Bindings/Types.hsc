@@ -152,6 +152,8 @@ c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 newtype CError = CError CInt
     deriving Show
 
+-- | Note that this is a total function.  If the error code is invalid,
+-- or one of the extended error codes, this returns 'ErrorUnknown'.
 decodeError :: CError -> Error
 decodeError (CError n) = case n of
     #{const SQLITE_OK}         -> ErrorOK
@@ -190,6 +192,10 @@ decodeError (CError n) = case n of
 newtype CColumnType = CColumnType CInt
     deriving Show
 
+-- | Note that, unlike 'decodeError', this is /not/ a total function.  It
+-- returns an 'error' if the column type number is invalid.
+--
+-- The set of column types in SQLite is small and fixed.
 decodeColumnType :: CColumnType -> ColumnType
 decodeColumnType (CColumnType n) = case n of
     #{const SQLITE_INTEGER} -> IntegerColumn
