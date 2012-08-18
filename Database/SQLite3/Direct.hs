@@ -128,12 +128,6 @@ toStepResult code =
         ErrorDone -> Right Done
         err       -> Left err
 
-toColumnType :: CColumnType -> Either Int ColumnType
-toColumnType code@(CColumnType n) =
-    case decodeColumnType code of
-        Just t  -> Right t
-        Nothing -> Left (fromIntegral n)
-
 ------------------------------------------------------------------------
 
 open :: Utf8 -> IO (Result Database)
@@ -211,7 +205,8 @@ bindNull (Statement stmt) idx =
 
 
 columnType :: Statement -> ColumnIndex -> IO ColumnType
-columnType = undefined
+columnType (Statement stmt) idx =
+    decodeColumnType <$> c_sqlite3_column_type stmt idx
 
 columnInt64 :: Statement -> ColumnIndex -> IO Int64
 columnInt64 = undefined

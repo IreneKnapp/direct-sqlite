@@ -191,11 +191,11 @@ decodeError (CError n) = case n of
 newtype CColumnType = CColumnType CInt
     deriving Show
 
-decodeColumnType :: CColumnType -> Maybe ColumnType
+decodeColumnType :: CColumnType -> ColumnType
 decodeColumnType (CColumnType n) = case n of
-    #{const SQLITE_INTEGER} -> Just IntegerColumn
-    #{const SQLITE_FLOAT}   -> Just FloatColumn
-    #{const SQLITE_TEXT}    -> Just TextColumn
-    #{const SQLITE_BLOB}    -> Just BlobColumn
-    #{const SQLITE_NULL}    -> Just NullColumn
-    _                       -> Nothing
+    #{const SQLITE_INTEGER} -> IntegerColumn
+    #{const SQLITE_FLOAT}   -> FloatColumn
+    #{const SQLITE_TEXT}    -> TextColumn
+    #{const SQLITE_BLOB}    -> BlobColumn
+    #{const SQLITE_NULL}    -> NullColumn
+    _                       -> error $ "decodeColumnType " ++ show n

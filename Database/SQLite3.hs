@@ -34,10 +34,6 @@ module Database.SQLite3 (
     where
 
 import Database.SQLite3.Bindings
-    hiding (decodeColumnType)
-
-import qualified Database.SQLite3.Bindings as Bindings
-    (decodeColumnType)
 
 import Prelude hiding (error)
 import qualified Prelude
@@ -53,15 +49,6 @@ import Foreign.C
 
 newtype Database  = Database  (Ptr CDatabase)
 newtype Statement = Statement (Ptr CStatement)
-
-decodeColumnType :: CColumnType -> ColumnType
-decodeColumnType = wrapDecode "decodeColumnType" Bindings.decodeColumnType
-
-wrapDecode :: Show a => String -> (a -> Maybe b) -> a -> b
-wrapDecode funcName f a =
-    case f a of
-        Just x  -> x
-        Nothing -> Prelude.error $ funcName ++ " " ++ show a
 
 data StepResult = Row | Done deriving (Eq, Show)
 
