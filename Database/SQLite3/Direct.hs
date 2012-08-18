@@ -56,8 +56,9 @@ module Database.SQLite3.Direct (
 
 import Database.SQLite3.Bindings
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Internal as BSI
+import qualified Data.ByteString            as BS
+import qualified Data.ByteString.Internal   as BSI
+import qualified Data.ByteString.Unsafe     as BSU
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
@@ -89,7 +90,7 @@ data SQLData
     | SQLNull
     deriving (Eq, Show, Typeable)
 
--- | A 'ByteString' containing UTF8-encoded text.
+-- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
     deriving (Eq, Show)
 
@@ -98,6 +99,14 @@ instance IsString Utf8 where
 
 packUtf8 :: CString -> IO Utf8
 packUtf8 cstr = Utf8 <$> BS.packCString cstr
+
+-- | Like 'unsafeUseAsCStringLen', but if the string is empty,
+-- never pass the callback a null pointer.
+unsafeUseAsCStringLenNoNull :: ByteString -> (CString -> CNumBytes -> IO a) -> IO a
+unsafeUseAsCStringLenNoNull bs cb
+    | BS.null bs = cb (intPtrToPtr 1) 0
+    | otherwise  = BSU.unsafeUseAsCStringLen bs $ \(ptr, len) ->
+                       cb ptr (fromIntegral len)
 
 -- Convert a 'CError' to a 'Result', in the common case where
 -- SQLITE_OK signals success and anything else signals an error.
@@ -181,16 +190,24 @@ bindInt64 (Statement stmt) idx value =
     toResult () <$> c_sqlite3_bind_int64 stmt idx value
 
 bindDouble :: Statement -> ParamIndex -> Double -> IO (Result ())
-bindDouble = undefined
+bindDouble (Statement stmt) idx value =
+    toResult () <$> c_sqlite3_bind_double stmt idx value
 
 bindText :: Statement -> ParamIndex -> Utf8 -> IO (Result ())
-bindText = undefined
+bindText (Statement stmt) idx (Utf8 value) =
+    unsafeUseAsCStringLenNoNull value $ \ptr len ->
+        toResult () <$>
+            c_sqlite3_bind_text stmt idx ptr len c_SQLITE_TRANSIENT
 
 bindBlob :: Statement -> ParamIndex -> ByteString -> IO (Result ())
-bindBlob = undefined
+bindBlob (Statement stmt) idx value =
+    unsafeUseAsCStringLenNoNull value $ \ptr len ->
+        toResult () <$>
+            c_sqlite3_bind_blob stmt idx ptr len c_SQLITE_TRANSIENT
 
 bindNull :: Statement -> ParamIndex -> IO (Result ())
-bindNull = undefined
+bindNull (Statement stmt) idx =
+    toResult () <$> c_sqlite3_bind_null stmt idx
 
 
 columnType :: Statement -> ColumnIndex -> IO ColumnType
