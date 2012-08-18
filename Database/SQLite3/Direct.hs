@@ -9,7 +9,7 @@ module Database.SQLite3.Direct (
     SQLData(..),
 
     -- ** Results and errors
-    Result(..),
+    Result,
     StepResult(..),
     Error(..),
 
@@ -79,11 +79,7 @@ data StepResult
     | Done
     deriving (Eq, Show)
 
-data Result a
-    = Okay           a
-    | Error         !Error
-    | UnknownError  !Int
-    deriving (Eq, Show)
+type Result a = Either Error a
 
 data SQLData
     = SQLInteger    !Int64
@@ -103,32 +99,25 @@ instance IsString Utf8 where
 packUtf8 :: CString -> IO Utf8
 packUtf8 cstr = Utf8 <$> BS.packCString cstr
 
-errorResult :: CError -> Result a
-errorResult code@(CError n) =
-    case decodeError code of
-        Just err -> Error err
-        Nothing  -> UnknownError (fromIntegral n)
-
 -- Convert a 'CError' to a 'Result', in the common case where
 -- SQLITE_OK signals success and anything else signals an error.
 --
 -- Note that SQLITE_OK == 0.
 toResult :: a -> CError -> Result a
-toResult a (CError 0) = Okay a
-toResult _ code       = errorResult code
+toResult a (CError 0) = Right a
+toResult _ code       = Left $ decodeError code
 
 -- Only perform the action if the 'CError' is SQLITE_OK.
 toResultM :: Monad m => m a -> CError -> m (Result a)
-toResultM m (CError 0) = m >>= return . Okay
-toResultM _ code       = return (errorResult code)
+toResultM m (CError 0) = m >>= return . Right
+toResultM _ code       = return $ Left $ decodeError code
 
 toStepResult :: CError -> Result StepResult
-toStepResult code@(CError n) =
+toStepResult code =
     case decodeError code of
-        Just ErrorRow  -> Okay Row
-        Just ErrorDone -> Okay Done
-        Just err       -> Error err
-        Nothing        -> UnknownError (fromIntegral n)
+        ErrorRow  -> Right Row
+        ErrorDone -> Right Done
+        err       -> Left err
 
 toColumnType :: CColumnType -> Either Int ColumnType
 toColumnType code@(CColumnType n) =

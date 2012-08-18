@@ -75,6 +75,7 @@ data Error = ErrorOK                     -- ^ Successful result
            | ErrorNotADatabase           -- ^ File opened that is not a database file
            | ErrorRow                    -- ^ @sqlite3_step()@ has another row ready
            | ErrorDone                   -- ^ @sqlite3_step()@ has finished executing
+           | ErrorUnknown CInt           -- ^ Unknown error code
              deriving (Eq, Show)
 
 data ColumnType = IntegerColumn
@@ -152,38 +153,38 @@ c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 newtype CError = CError CInt
     deriving Show
 
-decodeError :: CError -> Maybe Error
+decodeError :: CError -> Error
 decodeError (CError n) = case n of
-    #{const SQLITE_OK}         -> Just ErrorOK
-    #{const SQLITE_ERROR}      -> Just ErrorError
-    #{const SQLITE_INTERNAL}   -> Just ErrorInternal
-    #{const SQLITE_PERM}       -> Just ErrorPermission
-    #{const SQLITE_ABORT}      -> Just ErrorAbort
-    #{const SQLITE_BUSY}       -> Just ErrorBusy
-    #{const SQLITE_LOCKED}     -> Just ErrorLocked
-    #{const SQLITE_NOMEM}      -> Just ErrorNoMemory
-    #{const SQLITE_READONLY}   -> Just ErrorReadOnly
-    #{const SQLITE_INTERRUPT}  -> Just ErrorInterrupt
-    #{const SQLITE_IOERR}      -> Just ErrorIO
-    #{const SQLITE_CORRUPT}    -> Just ErrorCorrupt
-    #{const SQLITE_NOTFOUND}   -> Just ErrorNotFound
-    #{const SQLITE_FULL}       -> Just ErrorFull
-    #{const SQLITE_CANTOPEN}   -> Just ErrorCan'tOpen
-    #{const SQLITE_PROTOCOL}   -> Just ErrorProtocol
-    #{const SQLITE_EMPTY}      -> Just ErrorEmpty
-    #{const SQLITE_SCHEMA}     -> Just ErrorSchema
-    #{const SQLITE_TOOBIG}     -> Just ErrorTooBig
-    #{const SQLITE_CONSTRAINT} -> Just ErrorConstraint
-    #{const SQLITE_MISMATCH}   -> Just ErrorMismatch
-    #{const SQLITE_MISUSE}     -> Just ErrorMisuse
-    #{const SQLITE_NOLFS}      -> Just ErrorNoLargeFileSupport
-    #{const SQLITE_AUTH}       -> Just ErrorAuthorization
-    #{const SQLITE_FORMAT}     -> Just ErrorFormat
-    #{const SQLITE_RANGE}      -> Just ErrorRange
-    #{const SQLITE_NOTADB}     -> Just ErrorNotADatabase
-    #{const SQLITE_ROW}        -> Just ErrorRow
-    #{const SQLITE_DONE}       -> Just ErrorDone
-    _                          -> Nothing
+    #{const SQLITE_OK}         -> ErrorOK
+    #{const SQLITE_ERROR}      -> ErrorError
+    #{const SQLITE_INTERNAL}   -> ErrorInternal
+    #{const SQLITE_PERM}       -> ErrorPermission
+    #{const SQLITE_ABORT}      -> ErrorAbort
+    #{const SQLITE_BUSY}       -> ErrorBusy
+    #{const SQLITE_LOCKED}     -> ErrorLocked
+    #{const SQLITE_NOMEM}      -> ErrorNoMemory
+    #{const SQLITE_READONLY}   -> ErrorReadOnly
+    #{const SQLITE_INTERRUPT}  -> ErrorInterrupt
+    #{const SQLITE_IOERR}      -> ErrorIO
+    #{const SQLITE_CORRUPT}    -> ErrorCorrupt
+    #{const SQLITE_NOTFOUND}   -> ErrorNotFound
+    #{const SQLITE_FULL}       -> ErrorFull
+    #{const SQLITE_CANTOPEN}   -> ErrorCan'tOpen
+    #{const SQLITE_PROTOCOL}   -> ErrorProtocol
+    #{const SQLITE_EMPTY}      -> ErrorEmpty
+    #{const SQLITE_SCHEMA}     -> ErrorSchema
+    #{const SQLITE_TOOBIG}     -> ErrorTooBig
+    #{const SQLITE_CONSTRAINT} -> ErrorConstraint
+    #{const SQLITE_MISMATCH}   -> ErrorMismatch
+    #{const SQLITE_MISUSE}     -> ErrorMisuse
+    #{const SQLITE_NOLFS}      -> ErrorNoLargeFileSupport
+    #{const SQLITE_AUTH}       -> ErrorAuthorization
+    #{const SQLITE_FORMAT}     -> ErrorFormat
+    #{const SQLITE_RANGE}      -> ErrorRange
+    #{const SQLITE_NOTADB}     -> ErrorNotADatabase
+    #{const SQLITE_ROW}        -> ErrorRow
+    #{const SQLITE_DONE}       -> ErrorDone
+    _                          -> ErrorUnknown n
 
 
 -- | <http://www.sqlite.org/c3ref/c_blob.html>

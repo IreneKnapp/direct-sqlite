@@ -34,10 +34,10 @@ module Database.SQLite3 (
     where
 
 import Database.SQLite3.Bindings
-    hiding (decodeError, decodeColumnType)
+    hiding (decodeColumnType)
 
 import qualified Database.SQLite3.Bindings as Bindings
-    (decodeError, decodeColumnType)
+    (decodeColumnType)
 
 import Prelude hiding (error)
 import qualified Prelude
@@ -53,9 +53,6 @@ import Foreign.C
 
 newtype Database  = Database  (Ptr CDatabase)
 newtype Statement = Statement (Ptr CStatement)
-
-decodeError :: CError -> Error
-decodeError = wrapDecode "decodeError" Bindings.decodeError
 
 decodeColumnType :: CColumnType -> ColumnType
 decodeColumnType = wrapDecode "decodeColumnType" Bindings.decodeColumnType
