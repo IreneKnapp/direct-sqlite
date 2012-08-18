@@ -2,6 +2,13 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
+-- |
+-- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
+--
+--  * It returns errors instead of throwing them.
+--
+--  * It only uses cheap conversions.  None of these bindings convert from
+--    'String' or 'T.Text'.
 module Database.SQLite3.Direct (
     -- * Types
     Database(..),
@@ -97,8 +104,13 @@ newtype Utf8 = Utf8 ByteString
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
 
-packUtf8 :: CString -> IO Utf8
-packUtf8 cstr = Utf8 <$> BS.packCString cstr
+packUtf8 :: a -> (Utf8 -> a) -> CString -> IO a
+packUtf8 n f cstr | cstr == nullPtr = return n
+                  | otherwise       = f . Utf8 <$> BS.packCString cstr
+
+packCStringLen :: CString -> CNumBytes -> IO ByteString
+packCStringLen cstr len =
+    BS.packCStringLen (cstr, fromIntegral len)
 
 -- | Like 'unsafeUseAsCStringLen', but if the string is empty,
 -- never pass the callback a null pointer.
@@ -143,7 +155,7 @@ close (Database db) =
 
 errmsg :: Database -> IO Utf8
 errmsg (Database db) =
-    c_sqlite3_errmsg db >>= packUtf8
+    c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
 
 prepare :: Database -> Utf8 -> IO (Result Statement)
 prepare (Database db) (Utf8 sql) =
@@ -169,11 +181,9 @@ bindParameterCount (Statement stmt) =
     c_sqlite3_bind_parameter_count stmt
 
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
-bindParameterName (Statement stmt) idx = do
-    cstr <- c_sqlite3_bind_parameter_name stmt idx
-    if cstr == nullPtr
-        then return Nothing
-        else Just <$> packUtf8 cstr
+bindParameterName (Statement stmt) idx =
+    c_sqlite3_bind_parameter_name stmt idx >>=
+        packUtf8 Nothing Just
 
 columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
@@ -203,23 +213,29 @@ bindNull :: Statement -> ParamIndex -> IO (Result ())
 bindNull (Statement stmt) idx =
     toResult () <$> c_sqlite3_bind_null stmt idx
 
-
 columnType :: Statement -> ColumnIndex -> IO ColumnType
 columnType (Statement stmt) idx =
     decodeColumnType <$> c_sqlite3_column_type stmt idx
 
 columnInt64 :: Statement -> ColumnIndex -> IO Int64
-columnInt64 = undefined
+columnInt64 (Statement stmt) idx =
+    c_sqlite3_column_int64 stmt idx
 
 columnDouble :: Statement -> ColumnIndex -> IO Double
-columnDouble = undefined
+columnDouble (Statement stmt) idx =
+    c_sqlite3_column_double stmt idx
 
 columnText :: Statement -> ColumnIndex -> IO Utf8
-columnText = undefined
+columnText (Statement stmt) idx = do
+    ptr <- c_sqlite3_column_text stmt idx
+    len <- c_sqlite3_column_bytes stmt idx
+    Utf8 <$> packCStringLen ptr len
 
 columnBlob :: Statement -> ColumnIndex -> IO ByteString
-columnBlob = undefined
-
+columnBlob (Statement stmt) idx = do
+    ptr <- c_sqlite3_column_blob stmt idx
+    len <- c_sqlite3_column_bytes stmt idx
+    packCStringLen ptr len
 
 bind :: Statement -> ParamIndex -> SQLData -> IO (Result ())
 bind = undefined
