@@ -27,6 +27,7 @@ module Database.SQLite3.Direct (
     columnCount,
 
     -- * Binding values to a prepared statement
+    -- | <http://www.sqlite.org/c3ref/bind_blob.html>
     bind,
     binds,
     bindInt64,
@@ -36,6 +37,7 @@ module Database.SQLite3.Direct (
     bindNull,
 
     -- * Reading the result row
+    -- | <http://www.sqlite.org/c3ref/column_blob.html>
     column,
     columns,
     columnType,
@@ -96,6 +98,7 @@ data SQLData
 newtype Utf8 = Utf8 ByteString
     deriving (Eq, Show)
 
+-- | @fromString = Utf8 . 'T.encodeUtf8' . 'T.pack'@
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
 
@@ -139,6 +142,7 @@ toStepResult code =
 
 ------------------------------------------------------------------------
 
+-- | <http://www.sqlite.org/c3ref/open.html>
 open :: Utf8 -> IO (Either Error Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
@@ -146,14 +150,17 @@ open (Utf8 path) =
             c_sqlite3_open path' database >>=
                 toResultM (Database <$> peek database)
 
+-- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())
 close (Database db) =
     toResult () <$> c_sqlite3_close db
 
+-- | <http://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
 
+-- | <http://www.sqlite.org/c3ref/prepare.html>
 prepare :: Database -> Utf8 -> IO (Either Error Statement)
 prepare (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
@@ -161,27 +168,43 @@ prepare (Database db) (Utf8 sql) =
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
                 toResultM (Statement <$> peek statement)
 
+-- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO (Either Error StepResult)
 step (Statement stmt) =
     toStepResult <$> c_sqlite3_step stmt
 
+-- | <http://www.sqlite.org/c3ref/reset.html>
+--
+-- /Warning:/ If the most recent 'step' call failed,
+-- this will return the corresponding error.
 reset :: Statement -> IO (Either Error ())
 reset (Statement stmt) =
     toResult () <$> c_sqlite3_reset stmt
 
+-- | <http://www.sqlite.org/c3ref/finalize.html>
+--
+-- /Warning:/ If the most recent 'step' call failed,
+-- this will return the corresponding error.
 finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
 
+-- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
+--
+-- This returns the index of the largest (rightmost) parameter, which is not
+-- necessarily the number of parameters.  If numbered parameters like @?5@
+-- are used, there may be gaps in the list.
 bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount (Statement stmt) =
     c_sqlite3_bind_parameter_count stmt
 
+-- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
 bindParameterName (Statement stmt) idx =
     c_sqlite3_bind_parameter_name stmt idx >>=
         packUtf8 Nothing Just
 
+-- | <http://www.sqlite.org/c3ref/column_count.html>
 columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
     c_sqlite3_column_count stmt
