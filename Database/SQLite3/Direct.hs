@@ -4,8 +4,8 @@
 {-# OPTIONS -fno-warn-name-shadowing #-}
 module Database.SQLite3.Direct (
     -- * Types
-    Database,
-    Statement,
+    Database(..),
+    Statement(..),
     SQLData(..),
 
     -- ** Results and errors
@@ -13,7 +13,11 @@ module Database.SQLite3.Direct (
     StepResult(..),
     Error(..),
 
-{-
+    -- ** Special integer types
+    ParamIndex(..),
+    ColumnIndex(..),
+    ColumnCount(..),
+
     -- * Connection management
     open,
     close,
@@ -47,7 +51,6 @@ module Database.SQLite3.Direct (
     columnDouble,
     columnText,
     columnBlob,
--}
 ) where
 
 import Database.SQLite3.Bindings
@@ -110,3 +113,81 @@ toColumnType code@(CColumnType n) =
     case decodeColumnType code of
         Just t  -> Right t
         Nothing -> Left (fromIntegral n)
+
+------------------------------------------------------------------------
+
+open :: String -> IO Database
+open = undefined
+
+close :: Database -> IO ()
+close = undefined
+
+errmsg :: Database -> IO String
+errmsg = undefined
+
+
+prepare :: Database -> String -> IO Statement
+prepare = undefined
+
+step :: Statement -> IO StepResult
+step = undefined
+
+reset :: Statement -> IO ()
+reset = undefined
+
+finalize :: Statement -> IO ()
+finalize = undefined
+
+
+bindParameterCount :: Statement -> IO Int
+bindParameterCount = undefined
+
+bindParameterName :: Statement -> Int -> IO (Maybe String)
+bindParameterName = undefined
+
+columnCount :: Statement -> IO Int
+columnCount = undefined
+
+
+bind :: Statement -> ParamIndex -> SQLData -> IO ()
+bind = undefined
+
+binds :: Statement -> [SQLData] -> IO ()
+binds = undefined
+
+bindInt64 :: Statement -> Int -> Int64 -> IO ()
+bindInt64 = undefined
+
+bindDouble :: Statement -> Int -> Double -> IO ()
+bindDouble = undefined
+
+bindText :: Statement -> Int -> T.Text -> IO ()
+bindText = undefined
+
+bindBlob :: Statement -> Int -> BS.ByteString -> IO ()
+bindBlob = undefined
+
+bindNull :: Statement -> Int -> IO ()
+bindNull = undefined
+
+
+column :: Statement -> Int -> IO SQLData
+column = undefined
+
+columns :: Statement -> IO [SQLData]
+columns = undefined
+
+columnType :: Statement -> Int -> IO ColumnType
+columnType = undefined
+
+columnInt64 :: Statement -> Int -> IO Int64
+columnInt64 = undefined
+
+columnDouble :: Statement -> Int -> IO Double
+columnDouble = undefined
+
+columnText :: Statement -> Int -> IO T.Text
+columnText = undefined
+
+columnBlob :: Statement -> Int -> IO BS.ByteString
+columnBlob = undefined
