@@ -108,6 +108,9 @@ foreign import ccall "sqlite3_bind_blob"
         :: Ptr CStatement
         -> ParamIndex       -- ^ Index of the SQL parameter to be set
         -> Ptr a            -- ^ Value to bind to the parameter.
+                            --
+                            --   /Warning:/ If this pointer is @NULL@, this
+                            --   will bind a null value, rather than an empty blob.
         -> CNumBytes        -- ^ Length, in bytes.  This must not be negative.
         -> Ptr CDestructor
         -> IO CError
@@ -116,7 +119,8 @@ foreign import ccall "sqlite3_bind_text"
     c_sqlite3_bind_text
         :: Ptr CStatement
         -> ParamIndex
-        -> CString
+        -> CString          -- ^ /Warning:/ If this pointer is @NULL@, this
+                            --   will bind a null value, rather than an empty text.
         -> CNumBytes        -- ^ Length, in bytes.  If this is negative,
                             --   the value is treated as a NUL-terminated string.
         -> Ptr CDestructor
