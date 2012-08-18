@@ -50,6 +50,7 @@ module Database.SQLite3.Direct (
     Database(..),
     Statement(..),
     SQLData(..),
+    ColumnType(..),
 
     -- ** Results and errors
     StepResult(..),
