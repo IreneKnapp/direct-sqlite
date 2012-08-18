@@ -21,7 +21,7 @@ module Database.SQLite3.Bindings.Types (
     -- * Indices
     ParamIndex(..),
     ColumnIndex(..),
-    ColumnCount(..),
+    ColumnCount,
 
     -- * Miscellaneous
     CNumBytes(..),
@@ -110,35 +110,34 @@ newtype ColumnIndex = ColumnIndex CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 -- | Number of columns in a result set.
-newtype ColumnCount = ColumnCount CInt
-    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
+type ColumnCount = ColumnIndex
 
 newtype CNumBytes = CNumBytes CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
 fromParamIndex :: Num a => ParamIndex -> a
-fromParamIndex (ParamIndex n) = fromIntegral n
+fromParamIndex = fromIntegral
 
 fromColumnIndex :: Num a => ColumnIndex -> a
-fromColumnIndex (ColumnIndex n) = fromIntegral n
+fromColumnIndex = fromIntegral
 
 fromColumnCount :: Num a => ColumnCount -> a
-fromColumnCount (ColumnCount n) = fromIntegral n
+fromColumnCount = fromIntegral
 
 fromCNumBytes :: Num a => CNumBytes -> a
-fromCNumBytes (CNumBytes n) = fromIntegral n
+fromCNumBytes = fromIntegral
 
 toParamIndex :: Integral a => a -> ParamIndex
-toParamIndex n = ParamIndex (fromIntegral n)
+toParamIndex = fromIntegral
 
 toColumnIndex :: Integral a => a -> ColumnIndex
-toColumnIndex n = ColumnIndex (fromIntegral n)
+toColumnIndex = fromIntegral
 
 toColumnCount :: Integral a => a -> ColumnCount
-toColumnCount n = ColumnCount (fromIntegral n)
+toColumnCount = fromIntegral
 
 toCNumBytes :: Integral a => a -> CNumBytes
-toCNumBytes n = CNumBytes (fromIntegral n)
+toCNumBytes = fromIntegral
 
 -- | <http://www.sqlite.org/c3ref/c_static.html>
 --

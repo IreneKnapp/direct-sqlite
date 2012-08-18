@@ -57,7 +57,7 @@ module Database.SQLite3.Direct (
     Utf8(..),
     ParamIndex(..),
     ColumnIndex(..),
-    ColumnCount(..),
+    ColumnCount,
 ) where
 
 import Database.SQLite3.Bindings
@@ -268,4 +268,4 @@ binds statement sqlData =
 columns :: Statement -> IO [SQLData]
 columns statement = do
     count <- columnCount statement
-    mapM (column statement) [0 .. fromIntegral (count-1)]
+    mapM (column statement) [0..count-1]
