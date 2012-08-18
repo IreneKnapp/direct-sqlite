@@ -110,14 +110,14 @@ errorResult code@(CError n) =
 -- SQLITE_OK signals success and anything else signals an error.
 --
 -- Note that SQLITE_OK == 0.
-toResult :: CError -> a -> Result a
-toResult (CError 0) a = Okay a
-toResult code       _ = errorResult code
+toResult :: a -> CError -> Result a
+toResult a (CError 0) = Okay a
+toResult _ code       = errorResult code
 
 -- Only perform the action if the 'CError' is SQLITE_OK.
-toResultM :: Monad m => CError -> m a -> m (Result a)
-toResultM (CError 0) m = m >>= return . Okay
-toResultM code       _ = return (errorResult code)
+toResultM :: Monad m => m a -> CError -> m (Result a)
+toResultM m (CError 0) = m >>= return . Okay
+toResultM _ code       = return (errorResult code)
 
 toStepResult :: CError -> Result StepResult
 toStepResult code@(CError n) =
@@ -138,12 +138,13 @@ toColumnType code@(CColumnType n) =
 open :: Utf8 -> IO (Result Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
-        alloca $ \database -> do
-            rc <- c_sqlite3_open path' database
-            toResultM rc (Database <$> peek database)
+        alloca $ \database ->
+            c_sqlite3_open path' database >>=
+                toResultM (Database <$> peek database)
 
-close :: Database -> IO ()
-close = undefined
+close :: Database -> IO (Result ())
+close (Database db) =
+    toResult () <$> c_sqlite3_close db
 
 errmsg :: Database -> IO String
 errmsg = undefined
