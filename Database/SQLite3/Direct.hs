@@ -153,17 +153,24 @@ errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8
 
-prepare :: Database -> Utf8 -> IO Statement
-prepare = undefined
+prepare :: Database -> Utf8 -> IO (Result Statement)
+prepare (Database db) (Utf8 sql) =
+    BS.useAsCString sql $ \sql' ->
+        alloca $ \statement ->
+            c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
+                toResultM (Statement <$> peek statement)
 
-step :: Statement -> IO StepResult
-step = undefined
+step :: Statement -> IO (Result StepResult)
+step (Statement stmt) =
+    toStepResult <$> c_sqlite3_step stmt
 
-reset :: Statement -> IO ()
-reset = undefined
+reset :: Statement -> IO (Result ())
+reset (Statement stmt) =
+    toResult () <$> c_sqlite3_reset stmt
 
-finalize :: Statement -> IO ()
-finalize = undefined
+finalize :: Statement -> IO (Result ())
+finalize (Statement stmt) =
+    toResult () <$> c_sqlite3_finalize stmt
 
 bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount = undefined
