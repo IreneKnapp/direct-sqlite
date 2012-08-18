@@ -64,12 +64,10 @@ module Database.SQLite3.Direct (
 import Database.SQLite3.Bindings
 
 import qualified Data.ByteString            as BS
-import qualified Data.ByteString.Internal   as BSI
 import qualified Data.ByteString.Unsafe     as BSU
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
-import Control.Monad
 import Data.ByteString      (ByteString)
 import Data.String          (IsString(..))
 import Data.Typeable
@@ -238,10 +236,23 @@ columnBlob (Statement stmt) idx = do
     packCStringLen ptr len
 
 bind :: Statement -> ParamIndex -> SQLData -> IO (Result ())
-bind = undefined
+bind statement idx datum =
+    case datum of
+        SQLInteger v -> bindInt64  statement idx v
+        SQLFloat   v -> bindDouble statement idx v
+        SQLText    v -> bindText   statement idx v
+        SQLBlob    v -> bindBlob   statement idx v
+        SQLNull      -> bindNull   statement idx
 
 column :: Statement -> ColumnIndex -> IO SQLData
-column = undefined
+column statement idx = do
+    theType <- columnType statement idx
+    case theType of
+        IntegerColumn -> SQLInteger <$> columnInt64  statement idx
+        FloatColumn   -> SQLFloat   <$> columnDouble statement idx
+        TextColumn    -> SQLText    <$> columnText   statement idx
+        BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
+        NullColumn    -> return SQLNull
 
 binds :: Statement -> [SQLData] -> IO (Result ())
 binds = undefined
