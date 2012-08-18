@@ -75,7 +75,6 @@ data Error = ErrorOK                     -- ^ Successful result
            | ErrorNotADatabase           -- ^ File opened that is not a database file
            | ErrorRow                    -- ^ @sqlite3_step()@ has another row ready
            | ErrorDone                   -- ^ @sqlite3_step()@ has finished executing
-           | ErrorUnknown CInt           -- ^ Unknown error code
              deriving (Eq, Show)
 
 data ColumnType = IntegerColumn
@@ -152,8 +151,16 @@ c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 newtype CError = CError CInt
     deriving Show
 
--- | Note that this is a total function.  If the error code is invalid,
--- or one of the extended error codes, this returns 'ErrorUnknown'.
+-- | Note that this is a partial function.  If the error code is invalid, or
+-- perhaps introduced in a newer version of SQLite but this library has not
+-- been updated to support it, the result is undefined.
+--
+-- To be clear, if 'decodeError' fails, it is /undefined behavior/, not an
+-- exception you can handle.
+--
+-- Therefore, do not use direct-sqlite with a different version of SQLite than
+-- the one bundled (currently, 3.7.13).  If you do, ensure that 'decodeError'
+-- and 'decodeColumnType' are still exhaustive.
 decodeError :: CError -> Error
 decodeError (CError n) = case n of
     #{const SQLITE_OK}         -> ErrorOK
@@ -185,17 +192,15 @@ decodeError (CError n) = case n of
     #{const SQLITE_NOTADB}     -> ErrorNotADatabase
     #{const SQLITE_ROW}        -> ErrorRow
     #{const SQLITE_DONE}       -> ErrorDone
-    _                          -> ErrorUnknown n
+    _                          -> error $ "decodeError " ++ show n
 
 
 -- | <http://www.sqlite.org/c3ref/c_blob.html>
 newtype CColumnType = CColumnType CInt
     deriving Show
 
--- | Note that, unlike 'decodeError', this is /not/ a total function.  It
--- returns an 'error' if the column type number is invalid.
---
--- The set of column types in SQLite is small and fixed.
+-- | Note that this is a partial function.
+-- See 'decodeError' for more information.
 decodeColumnType :: CColumnType -> ColumnType
 decodeColumnType (CColumnType n) = case n of
     #{const SQLITE_INTEGER} -> IntegerColumn
