@@ -10,21 +10,6 @@
 --  * It only uses cheap conversions.  None of these bindings convert from
 --    'String' or 'T.Text'.
 module Database.SQLite3.Direct (
-    -- * Types
-    Database(..),
-    Statement(..),
-    SQLData(..),
-
-    -- ** Results and errors
-    StepResult(..),
-    Error(..),
-
-    -- ** Special types
-    Utf8(..),
-    ParamIndex(..),
-    ColumnIndex(..),
-    ColumnCount(..),
-
     -- * Connection management
     open,
     close,
@@ -58,6 +43,21 @@ module Database.SQLite3.Direct (
     columnDouble,
     columnText,
     columnBlob,
+
+    -- * Types
+    Database(..),
+    Statement(..),
+    SQLData(..),
+
+    -- ** Results and errors
+    StepResult(..),
+    Error(..),
+
+    -- ** Special types
+    Utf8(..),
+    ParamIndex(..),
+    ColumnIndex(..),
+    ColumnCount(..),
 ) where
 
 import Database.SQLite3.Bindings
