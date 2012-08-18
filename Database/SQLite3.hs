@@ -186,7 +186,7 @@ finalize statement = do
 -- used, there may be gaps in the list.
 bindParameterCount :: Statement -> IO Int
 bindParameterCount (Statement stmt) =
-  fromCParamIndex <$> c_sqlite3_bind_parameter_count stmt
+  fromParamIndex <$> c_sqlite3_bind_parameter_count stmt
 
 maybeNullCString :: CString -> IO (Maybe BS.ByteString)
 maybeNullCString s =
@@ -201,7 +201,7 @@ maybeNullCString s =
 -- Note that the parameter index starts at 1, not 0.
 bindParameterName :: Statement -> Int -> IO (Maybe String)
 bindParameterName (Statement stmt) idx = do
-  mn <- c_sqlite3_bind_parameter_name stmt (toCParamIndex idx) >>= maybeNullCString
+  mn <- c_sqlite3_bind_parameter_name stmt (toParamIndex idx) >>= maybeNullCString
   return (mn >>= return . T.unpack . T.decodeUtf8)
 
 bindBlobError :: Statement -> Int -> BS.ByteString -> IO Error
@@ -210,7 +210,7 @@ bindBlobError (Statement statement) parameterIndex byteString = do
   BS.useAsCString byteString
                   (\dataC -> do
                      error <- c_sqlite3_bind_blob statement
-                                                  (toCParamIndex parameterIndex)
+                                                  (toParamIndex parameterIndex)
                                                   dataC
                                                   (toCNumBytes size)
                                                   c_SQLITE_TRANSIENT
@@ -225,7 +225,7 @@ bindBlob statement parameterIndex byteString = do
 bindDoubleError :: Statement -> Int -> Double -> IO Error
 bindDoubleError (Statement statement) parameterIndex datum = do
   error <- c_sqlite3_bind_double statement
-                                 (toCParamIndex parameterIndex)
+                                 (toParamIndex parameterIndex)
                                  datum
   return $ decodeError error
 bindDouble :: Statement -> Int -> Double -> IO ()
@@ -238,7 +238,7 @@ bindDouble statement parameterIndex datum = do
 bindIntError :: Statement -> Int -> Int -> IO Error
 bindIntError (Statement statement) parameterIndex datum = do
   error <- c_sqlite3_bind_int64 statement
-                                (toCParamIndex parameterIndex)
+                                (toParamIndex parameterIndex)
                                 (fromIntegral datum)
   return $ decodeError error
 
@@ -252,7 +252,7 @@ bindInt statement parameterIndex datum = do
 bindInt64Error :: Statement -> Int -> Int64 -> IO Error
 bindInt64Error (Statement statement) parameterIndex datum = do
   error <- c_sqlite3_bind_int64 statement
-                                (toCParamIndex parameterIndex)
+                                (toParamIndex parameterIndex)
                                 datum
   return $ decodeError error
 bindInt64 :: Statement -> Int -> Int64 -> IO ()
@@ -264,7 +264,7 @@ bindInt64 statement parameterIndex datum = do
 
 bindNullError :: Statement -> Int -> IO Error
 bindNullError (Statement statement) parameterIndex = do
-  error <- c_sqlite3_bind_null statement (toCParamIndex parameterIndex)
+  error <- c_sqlite3_bind_null statement (toParamIndex parameterIndex)
   return $ decodeError error
 bindNull :: Statement -> Int -> IO ()
 bindNull statement parameterIndex = do
@@ -280,7 +280,7 @@ bindTextError (Statement statement) parameterIndex text = do
   BS.useAsCString byteString
                   (\dataC -> do
                      error <- c_sqlite3_bind_text statement
-                                                  (toCParamIndex parameterIndex)
+                                                  (toParamIndex parameterIndex)
                                                   dataC
                                                   (toCNumBytes size)
                                                   c_SQLITE_TRANSIENT
@@ -305,34 +305,34 @@ bind statement sqlData = do
 
 columnType :: Statement -> Int -> IO ColumnType
 columnType (Statement statement) columnIndex =
-  decodeColumnType <$> c_sqlite3_column_type statement (toCColumnIndex columnIndex)
+  decodeColumnType <$> c_sqlite3_column_type statement (toColumnIndex columnIndex)
 
 columnBlob :: Statement -> Int -> IO BS.ByteString
 columnBlob (Statement statement) columnIndex = do
-  size <- c_sqlite3_column_bytes statement (toCColumnIndex columnIndex)
+  size <- c_sqlite3_column_bytes statement (toColumnIndex columnIndex)
   BSI.create (fromCNumBytes size) $ \resultPtr -> do
-    dataPtr <- c_sqlite3_column_blob statement (toCColumnIndex columnIndex)
+    dataPtr <- c_sqlite3_column_blob statement (toColumnIndex columnIndex)
     if dataPtr /= nullPtr
         then BSI.memcpy resultPtr dataPtr (fromCNumBytes size)
         else return ()
 
 columnInt64 :: Statement -> Int -> IO Int64
 columnInt64 (Statement statement) columnIndex = do
-  c_sqlite3_column_int64 statement (toCColumnIndex columnIndex)
+  c_sqlite3_column_int64 statement (toColumnIndex columnIndex)
 
 columnDouble :: Statement -> Int -> IO Double
 columnDouble (Statement statement) columnIndex = do
-  c_sqlite3_column_double statement (toCColumnIndex columnIndex)
+  c_sqlite3_column_double statement (toColumnIndex columnIndex)
 
 columnText :: Statement -> Int -> IO T.Text
 columnText (Statement statement) columnIndex = do
-  text <- c_sqlite3_column_text statement (toCColumnIndex columnIndex)
+  text <- c_sqlite3_column_text statement (toColumnIndex columnIndex)
   byteString <- BS.packCString text
   return $ T.decodeUtf8 byteString
 
 columnCount :: Statement -> IO Int
 columnCount (Statement statement) =
-  fromCColumnCount <$> c_sqlite3_column_count statement
+  fromColumnCount <$> c_sqlite3_column_count statement
 
 column :: Statement -> Int -> IO SQLData
 column statement columnIndex = do

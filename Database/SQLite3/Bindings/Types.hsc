@@ -18,9 +18,9 @@ module Database.SQLite3.Bindings.Types (
     ColumnType(..),
 
     -- * Indices
-    CParamIndex(..),
-    CColumnIndex(..),
-    CColumnCount(..),
+    ParamIndex(..),
+    ColumnIndex(..),
+    ColumnCount(..),
 
     -- * Miscellaneous
     CNumBytes(..),
@@ -28,13 +28,13 @@ module Database.SQLite3.Bindings.Types (
     c_SQLITE_TRANSIENT,
 
     -- * Conversion helpers
-    fromCParamIndex,
-    fromCColumnIndex,
-    fromCColumnCount,
+    fromParamIndex,
+    fromColumnIndex,
+    fromColumnCount,
     fromCNumBytes,
-    toCParamIndex,
-    toCColumnIndex,
-    toCColumnCount,
+    toParamIndex,
+    toColumnIndex,
+    toColumnCount,
     toCNumBytes,
 ) where
 
@@ -98,42 +98,42 @@ data CStatement
 -- placeholders, and how parameter indices are assigned.
 --
 -- Parameter indices start from 1.
-newtype CParamIndex = CParamIndex CInt
+newtype ParamIndex = ParamIndex CInt
     deriving (Eq, Ord, Show)
 
 -- | Index of a column in a result set.
 --
 -- Column indices start from 0.
-newtype CColumnIndex = CColumnIndex CInt
+newtype ColumnIndex = ColumnIndex CInt
     deriving (Eq, Ord, Show)
 
 -- | Number of columns in a result set.
-newtype CColumnCount = CColumnCount CInt
+newtype ColumnCount = ColumnCount CInt
     deriving (Eq, Ord, Show)
 
 newtype CNumBytes = CNumBytes CInt
     deriving (Eq, Ord, Show)
 
-fromCParamIndex :: Num a => CParamIndex -> a
-fromCParamIndex (CParamIndex n) = fromIntegral n
+fromParamIndex :: Num a => ParamIndex -> a
+fromParamIndex (ParamIndex n) = fromIntegral n
 
-fromCColumnIndex :: Num a => CColumnIndex -> a
-fromCColumnIndex (CColumnIndex n) = fromIntegral n
+fromColumnIndex :: Num a => ColumnIndex -> a
+fromColumnIndex (ColumnIndex n) = fromIntegral n
 
-fromCColumnCount :: Num a => CColumnCount -> a
-fromCColumnCount (CColumnCount n) = fromIntegral n
+fromColumnCount :: Num a => ColumnCount -> a
+fromColumnCount (ColumnCount n) = fromIntegral n
 
 fromCNumBytes :: Num a => CNumBytes -> a
 fromCNumBytes (CNumBytes n) = fromIntegral n
 
-toCParamIndex :: Integral a => a -> CParamIndex
-toCParamIndex n = CParamIndex (fromIntegral n)
+toParamIndex :: Integral a => a -> ParamIndex
+toParamIndex n = ParamIndex (fromIntegral n)
 
-toCColumnIndex :: Integral a => a -> CColumnIndex
-toCColumnIndex n = CColumnIndex (fromIntegral n)
+toColumnIndex :: Integral a => a -> ColumnIndex
+toColumnIndex n = ColumnIndex (fromIntegral n)
 
-toCColumnCount :: Integral a => a -> CColumnCount
-toCColumnCount n = CColumnCount (fromIntegral n)
+toColumnCount :: Integral a => a -> ColumnCount
+toColumnCount n = ColumnCount (fromIntegral n)
 
 toCNumBytes :: Integral a => a -> CNumBytes
 toCNumBytes n = CNumBytes (fromIntegral n)

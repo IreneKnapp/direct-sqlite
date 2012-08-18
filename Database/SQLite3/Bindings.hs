@@ -92,21 +92,21 @@ foreign import ccall "sqlite3_finalize"
 -- necessarily the number of parameters.  If numbered parameters like @?5@
 -- are used, there may be gaps in the list.
 foreign import ccall "sqlite3_bind_parameter_count"
-    c_sqlite3_bind_parameter_count :: Ptr CStatement -> IO CParamIndex
+    c_sqlite3_bind_parameter_count :: Ptr CStatement -> IO ParamIndex
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
 foreign import ccall "sqlite3_bind_parameter_name"
-    c_sqlite3_bind_parameter_name :: Ptr CStatement -> CParamIndex -> IO CString
+    c_sqlite3_bind_parameter_name :: Ptr CStatement -> ParamIndex -> IO CString
 
 -- | <http://www.sqlite.org/c3ref/column_count.html>
 foreign import ccall "sqlite3_column_count"
-    c_sqlite3_column_count :: Ptr CStatement -> IO CColumnCount
+    c_sqlite3_column_count :: Ptr CStatement -> IO ColumnCount
 
 
 foreign import ccall "sqlite3_bind_blob"
     c_sqlite3_bind_blob
         :: Ptr CStatement
-        -> CParamIndex      -- ^ Index of the SQL parameter to be set
+        -> ParamIndex       -- ^ Index of the SQL parameter to be set
         -> Ptr a            -- ^ Value to bind to the parameter.
         -> CNumBytes        -- ^ Length, in bytes.  This must not be negative.
         -> Ptr CDestructor
@@ -115,7 +115,7 @@ foreign import ccall "sqlite3_bind_blob"
 foreign import ccall "sqlite3_bind_text"
     c_sqlite3_bind_text
         :: Ptr CStatement
-        -> CParamIndex
+        -> ParamIndex
         -> CString
         -> CNumBytes        -- ^ Length, in bytes.  If this is negative,
                             --   the value is treated as a NUL-terminated string.
@@ -123,29 +123,29 @@ foreign import ccall "sqlite3_bind_text"
         -> IO CError
 
 foreign import ccall "sqlite3_bind_double"
-    c_sqlite3_bind_double   :: Ptr CStatement -> CParamIndex -> Double -> IO CError
+    c_sqlite3_bind_double   :: Ptr CStatement -> ParamIndex -> Double -> IO CError
 
 foreign import ccall "sqlite3_bind_int64"
-    c_sqlite3_bind_int64    :: Ptr CStatement -> CParamIndex -> Int64 -> IO CError
+    c_sqlite3_bind_int64    :: Ptr CStatement -> ParamIndex -> Int64 -> IO CError
 
 foreign import ccall "sqlite3_bind_null"
-    c_sqlite3_bind_null     :: Ptr CStatement -> CParamIndex -> IO CError
+    c_sqlite3_bind_null     :: Ptr CStatement -> ParamIndex -> IO CError
 
 
 foreign import ccall "sqlite3_column_type"
-    c_sqlite3_column_type   :: Ptr CStatement -> CColumnIndex -> IO CColumnType
+    c_sqlite3_column_type   :: Ptr CStatement -> ColumnIndex -> IO CColumnType
 
 foreign import ccall "sqlite3_column_bytes"
-    c_sqlite3_column_bytes  :: Ptr CStatement -> CColumnIndex -> IO CNumBytes
+    c_sqlite3_column_bytes  :: Ptr CStatement -> ColumnIndex -> IO CNumBytes
 
 foreign import ccall "sqlite3_column_blob"
-    c_sqlite3_column_blob   :: Ptr CStatement -> CColumnIndex -> IO (Ptr a)
+    c_sqlite3_column_blob   :: Ptr CStatement -> ColumnIndex -> IO (Ptr a)
 
 foreign import ccall "sqlite3_column_text"
-    c_sqlite3_column_text   :: Ptr CStatement -> CColumnIndex -> IO CString
+    c_sqlite3_column_text   :: Ptr CStatement -> ColumnIndex -> IO CString
 
 foreign import ccall "sqlite3_column_int64"
-    c_sqlite3_column_int64  :: Ptr CStatement -> CColumnIndex -> IO Int64
+    c_sqlite3_column_int64  :: Ptr CStatement -> ColumnIndex -> IO Int64
 
 foreign import ccall "sqlite3_column_double"
-    c_sqlite3_column_double :: Ptr CStatement -> CColumnIndex -> IO Double
+    c_sqlite3_column_double :: Ptr CStatement -> ColumnIndex -> IO Double
