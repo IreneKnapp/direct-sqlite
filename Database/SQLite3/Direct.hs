@@ -253,8 +253,19 @@ column statement idx = do
         BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
         NullColumn    -> return SQLNull
 
+-- | If an error occurs, 'binds' stops and returns that error.
 binds :: Statement -> [SQLData] -> IO (Either Error ())
-binds = undefined
+binds statement sqlData =
+    loop $ zip [1..] sqlData
+  where
+    loop []                  = return $ Right ()
+    loop ((idx, datum) : xs) = do
+        result <- bind statement idx datum
+        case result of
+            Left err -> return $ Left err
+            Right _  -> loop xs
 
 columns :: Statement -> IO [SQLData]
-columns = undefined
+columns statement = do
+    count <- columnCount statement
+    mapM (column statement) [0 .. fromIntegral (count-1)]
