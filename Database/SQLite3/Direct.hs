@@ -16,7 +16,6 @@ module Database.SQLite3.Direct (
     SQLData(..),
 
     -- ** Results and errors
-    Result,
     StepResult(..),
     Error(..),
 
@@ -85,8 +84,6 @@ data StepResult
     | Done
     deriving (Eq, Show)
 
-type Result a = Either Error a
-
 data SQLData
     = SQLInteger    !Int64
     | SQLFloat      !Double
@@ -118,6 +115,8 @@ unsafeUseAsCStringLenNoNull bs cb
     | otherwise  = BSU.unsafeUseAsCStringLen bs $ \(ptr, len) ->
                        cb ptr (fromIntegral len)
 
+type Result a = Either Error a
+
 -- Convert a 'CError' to a 'Result', in the common case where
 -- SQLITE_OK signals success and anything else signals an error.
 --
@@ -140,14 +139,14 @@ toStepResult code =
 
 ------------------------------------------------------------------------
 
-open :: Utf8 -> IO (Result Database)
+open :: Utf8 -> IO (Either Error Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
         alloca $ \database ->
             c_sqlite3_open path' database >>=
                 toResultM (Database <$> peek database)
 
-close :: Database -> IO (Result ())
+close :: Database -> IO (Either Error ())
 close (Database db) =
     toResult () <$> c_sqlite3_close db
 
@@ -155,22 +154,22 @@ errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
 
-prepare :: Database -> Utf8 -> IO (Result Statement)
+prepare :: Database -> Utf8 -> IO (Either Error Statement)
 prepare (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
         alloca $ \statement ->
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
                 toResultM (Statement <$> peek statement)
 
-step :: Statement -> IO (Result StepResult)
+step :: Statement -> IO (Either Error StepResult)
 step (Statement stmt) =
     toStepResult <$> c_sqlite3_step stmt
 
-reset :: Statement -> IO (Result ())
+reset :: Statement -> IO (Either Error ())
 reset (Statement stmt) =
     toResult () <$> c_sqlite3_reset stmt
 
-finalize :: Statement -> IO (Result ())
+finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
 
@@ -187,27 +186,27 @@ columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
     c_sqlite3_column_count stmt
 
-bindInt64 :: Statement -> ParamIndex -> Int64 -> IO (Result ())
+bindInt64 :: Statement -> ParamIndex -> Int64 -> IO (Either Error ())
 bindInt64 (Statement stmt) idx value =
     toResult () <$> c_sqlite3_bind_int64 stmt idx value
 
-bindDouble :: Statement -> ParamIndex -> Double -> IO (Result ())
+bindDouble :: Statement -> ParamIndex -> Double -> IO (Either Error ())
 bindDouble (Statement stmt) idx value =
     toResult () <$> c_sqlite3_bind_double stmt idx value
 
-bindText :: Statement -> ParamIndex -> Utf8 -> IO (Result ())
+bindText :: Statement -> ParamIndex -> Utf8 -> IO (Either Error ())
 bindText (Statement stmt) idx (Utf8 value) =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         toResult () <$>
             c_sqlite3_bind_text stmt idx ptr len c_SQLITE_TRANSIENT
 
-bindBlob :: Statement -> ParamIndex -> ByteString -> IO (Result ())
+bindBlob :: Statement -> ParamIndex -> ByteString -> IO (Either Error ())
 bindBlob (Statement stmt) idx value =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         toResult () <$>
             c_sqlite3_bind_blob stmt idx ptr len c_SQLITE_TRANSIENT
 
-bindNull :: Statement -> ParamIndex -> IO (Result ())
+bindNull :: Statement -> ParamIndex -> IO (Either Error ())
 bindNull (Statement stmt) idx =
     toResult () <$> c_sqlite3_bind_null stmt idx
 
@@ -235,7 +234,7 @@ columnBlob (Statement stmt) idx = do
     len <- c_sqlite3_column_bytes stmt idx
     packCStringLen ptr len
 
-bind :: Statement -> ParamIndex -> SQLData -> IO (Result ())
+bind :: Statement -> ParamIndex -> SQLData -> IO (Either Error ())
 bind statement idx datum =
     case datum of
         SQLInteger v -> bindInt64  statement idx v
@@ -254,7 +253,7 @@ column statement idx = do
         BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
         NullColumn    -> return SQLNull
 
-binds :: Statement -> [SQLData] -> IO (Result ())
+binds :: Statement -> [SQLData] -> IO (Either Error ())
 binds = undefined
 
 columns :: Statement -> IO [SQLData]
