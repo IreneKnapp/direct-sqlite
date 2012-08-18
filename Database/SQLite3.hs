@@ -50,7 +50,6 @@ import Database.SQLite3.Bindings.Types
 import qualified Database.SQLite3.Direct as Direct
 
 import Prelude hiding (error)
-import qualified Prelude
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
