@@ -100,6 +100,9 @@ newtype Utf8 = Utf8 ByteString
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
 
+packUtf8 :: CString -> IO Utf8
+packUtf8 cstr = Utf8 <$> BS.packCString cstr
+
 errorResult :: CError -> Result a
 errorResult code@(CError n) =
     case decodeError code of
@@ -146,11 +149,11 @@ close :: Database -> IO (Result ())
 close (Database db) =
     toResult () <$> c_sqlite3_close db
 
-errmsg :: Database -> IO String
-errmsg = undefined
+errmsg :: Database -> IO Utf8
+errmsg (Database db) =
+    c_sqlite3_errmsg db >>= packUtf8
 
-
-prepare :: Database -> String -> IO Statement
+prepare :: Database -> Utf8 -> IO Statement
 prepare = undefined
 
 step :: Statement -> IO StepResult
@@ -162,16 +165,14 @@ reset = undefined
 finalize :: Statement -> IO ()
 finalize = undefined
 
-
-bindParameterCount :: Statement -> IO Int
+bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount = undefined
 
-bindParameterName :: Statement -> Int -> IO (Maybe String)
+bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
 bindParameterName = undefined
 
-columnCount :: Statement -> IO Int
+columnCount :: Statement -> IO ColumnCount
 columnCount = undefined
-
 
 bind :: Statement -> ParamIndex -> SQLData -> IO ()
 bind = undefined
