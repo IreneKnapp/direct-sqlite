@@ -2,7 +2,7 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
-module Database.SQLite3 (
+module Database.SQLite3.Direct (
                          Database,
                          Statement,
                          Error(..),
