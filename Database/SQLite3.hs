@@ -54,6 +54,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
+import Control.Monad        (when)
 import Data.Int             (Int64)
 import Data.String          (fromString)
 import Data.Typeable
@@ -175,6 +176,10 @@ bindText statement parameterIndex text =
 
 bind :: Statement -> [SQLData] -> IO ()
 bind statement sqlData = do
+  nParams <- bindParameterCount statement
+  when (nParams /= length sqlData) $
+    fail ("mismatched parameter count for bind.  Prepared statement "++
+          "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
   mapM_ (\(parameterIndex, datum) -> do
           case datum of
             SQLInteger int64 -> bindInt64 statement parameterIndex int64

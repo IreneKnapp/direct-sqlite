@@ -1,5 +1,7 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 
-import Control.Exception (bracket)
+import Prelude hiding (catch)
+import Control.Exception (IOException, bracket, catch)
 import Control.Monad     (when)
 import System.Exit       (exitFailure)
 import System.IO
@@ -18,9 +20,16 @@ data TestEnv =
 tests :: [TestEnv -> Test]
 tests =
     [ TestLabel "Simple" . testSimplest
+    , TestLabel "Params" . testBind
     , TestLabel "Params" . testBindParamCounts
     , TestLabel "Params" . testBindParamName
+    , TestLabel "Params" . testBindErrorValidation
     ]
+
+assertBindErrorCaught :: IO a -> Assertion
+assertBindErrorCaught action = do
+  catch (action >> return False) (\(_err :: IOException) -> return True) >>=
+    assertBool "assertExceptionCaught"
 
 -- Simplest SELECT
 testSimplest :: TestEnv -> Test
@@ -31,6 +40,27 @@ testSimplest TestEnv{..} = TestCase $ do
   Done <- step stmt
   finalize stmt
   assertEqual "1+1" (SQLInteger 2) res
+
+testBind :: TestEnv -> Test
+testBind TestEnv{..} = TestCase $ do
+  bracket (prepare conn "SELECT ?") finalize testBind1
+  bracket (prepare conn "SELECT ?+?") finalize testBind2
+  where
+    testBind1 stmt = do
+      let params =  [SQLInteger 3]
+      bind stmt params
+      Row <- step stmt
+      res <- columns stmt
+      Done <- step stmt
+      assertEqual "single param" params res
+
+    testBind2 stmt = do
+      let params =  [SQLInteger 1, SQLInteger 1]
+      bind stmt params
+      Row <- step stmt
+      res <- columns stmt
+      Done <- step stmt
+      assertEqual "two params param" [SQLInteger 2] res
 
 -- Test bindParameterCount
 testBindParamCounts :: TestEnv -> Test
@@ -58,6 +88,16 @@ testBindParamName TestEnv{..} = TestCase $ do
                 name <- bindParameterName stmt ndx
                 assertEqual "name match" expecting name) $ zip [1..] names
 
+testBindErrorValidation :: TestEnv -> Test
+testBindErrorValidation TestEnv{..} = TestCase $ do
+  bracket (prepare conn "SELECT ?") finalize (\stmt -> assertBindErrorCaught (testException1 stmt))
+  bracket (prepare conn "SELECT ?") finalize (\stmt -> assertBindErrorCaught (testException2 stmt))
+  where
+    -- Invalid use, one param in q string, none given
+    testException1 stmt = bind stmt []
+    -- Invalid use, one param in q string, 2 given
+    testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
+
 -- | Action for connecting to the database that will be used for
 -- testing.
 --
@@ -83,3 +123,4 @@ main = do
   Counts{cases, tried, errors, failures} <-
     withTestEnv $ \env -> runTestTT $ TestList $ map ($ env) tests
   when (cases /= tried || errors /= 0 || failures /= 0) $ exitFailure
+
