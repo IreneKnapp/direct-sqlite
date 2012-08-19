@@ -116,9 +116,11 @@ finalize statement =
     Direct.finalize statement >>= checkError Nothing "finalize"
 
 
--- | This returns the index of the largest (rightmost) parameter, which is not
--- necessarily the number of parameters.  If numbered parameters like @?5@ are
--- used, there may be gaps in the list.
+-- | This returns the index of the largest (rightmost) parameter.  Note that
+-- this is not necessarily the number of parameters.  If numbered parameters
+-- like @?5@ are used, there may be gaps in the list.
+--
+-- See 'Database.SQLite3.Direct.ParamIndex' for more information.
 bindParameterCount :: Statement -> IO Int
 bindParameterCount stmt =
     fromParamIndex <$> Direct.bindParameterCount stmt

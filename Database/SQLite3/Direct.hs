@@ -20,6 +20,7 @@ module Database.SQLite3.Direct (
     step,
     reset,
     finalize,
+    clearBindings,
 
     -- * Parameter and column information
     bindParameterCount,
@@ -176,8 +177,13 @@ step (Statement stmt) =
 
 -- | <http://www.sqlite.org/c3ref/reset.html>
 --
--- /Warning:/ If the most recent 'step' call failed,
--- this will return the corresponding error.
+-- Warning:
+--
+--  * If the most recent 'step' call failed,
+--    this will return the corresponding error.
+--
+--  * This does not reset the bindings on a prepared statement.
+--    Use 'clearBindings' to do that.
 reset :: Statement -> IO (Either Error ())
 reset (Statement stmt) =
     toResult () <$> c_sqlite3_reset stmt
@@ -190,11 +196,21 @@ finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
 
+-- | <http://www.sqlite.org/c3ref/clear_bindings.html>
+--
+-- Set all parameters in the prepared statement to null.
+clearBindings :: Statement -> IO ()
+clearBindings (Statement stmt) = do
+    _ <- c_sqlite3_clear_bindings stmt
+    return ()
+
 -- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
 --
--- This returns the index of the largest (rightmost) parameter, which is not
--- necessarily the number of parameters.  If numbered parameters like @?5@
--- are used, there may be gaps in the list.
+-- This returns the index of the largest (rightmost) parameter.  Note that this
+-- is not necessarily the number of parameters.  If numbered parameters like
+-- @?5@ are used, there may be gaps in the list.
+--
+-- See 'ParamIndex' for more information.
 bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount (Statement stmt) =
     c_sqlite3_bind_parameter_count stmt
@@ -258,6 +274,21 @@ columnBlob (Statement stmt) idx = do
     len <- c_sqlite3_column_bytes stmt idx
     packCStringLen ptr len
 
+-- | If the index is not between 1 and 'bindParameterCount' inclusive, this
+-- returns @'Left' 'ErrorRange'@.  Otherwise, it succeeds, even if the query
+-- skips this index by using numbered parameters.
+--
+-- Example:
+--
+-- >> Right stmt <- prepare conn "SELECT ?1, ?3, ?5"
+-- >> bind stmt 1 (SQLInteger 1)
+-- >Right ()
+-- >> bind stmt 2 (SQLInteger 2)
+-- >Right ()
+-- >> bind stmt 6 (SQLInteger 6)
+-- >Left ErrorRange
+-- >> step stmt >> columns stmt
+-- >[SQLInteger 1,SQLNull,SQLNull]
 bind :: Statement -> ParamIndex -> SQLData -> IO (Either Error ())
 bind statement idx datum =
     case datum of

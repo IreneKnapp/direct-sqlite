@@ -12,6 +12,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_step,
     c_sqlite3_reset,
     c_sqlite3_finalize,
+    c_sqlite3_clear_bindings,
 
     -- * Parameter and column information
     c_sqlite3_bind_parameter_count,
@@ -85,6 +86,12 @@ foreign import ccall "sqlite3_reset"
 -- this will return the corresponding error code.
 foreign import ccall "sqlite3_finalize"
     c_sqlite3_finalize :: Ptr CStatement -> IO CError
+
+-- | <http://www.sqlite.org/c3ref/clear_bindings.html>
+--
+-- A look at the source reveals that this function always returns @SQLITE_OK@.
+foreign import ccall "sqlite3_clear_bindings"
+    c_sqlite3_clear_bindings :: Ptr CStatement -> IO CError
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
 --

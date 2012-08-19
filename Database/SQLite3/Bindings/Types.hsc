@@ -94,17 +94,27 @@ data CDatabase
 -- @CStatement@ = @sqlite3_stmt@
 data CStatement
 
--- | Index of a parameter in a parameterized query.  See
--- <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of parameter
--- placeholders, and how parameter indices are assigned.
---
+-- | Index of a parameter in a parameterized query.
 -- Parameter indices start from 1.
+--
+-- When a query is 'Database.SQLite3.Direct.prepare'd, SQLite allocates an
+-- array indexed from 1 to the highest parameter index.  For example:
+--
+-- >>Right stmt <- prepare conn "SELECT ?1, ?5, ?3, ?"
+-- >>bindParameterCount stmt
+-- >ParamIndex 6
+--
+-- This will allocate an array indexed from 1 to 6 (@?@ takes the highest
+-- preceding index plus one).  The array is initialized with null values.
+-- When you 'Database.SQLite3.Direct.bind' a parameter, it assigns a new value
+-- to one of these indices.
+--
+-- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
+-- parameter placeholders, and how parameter indices are assigned.
 newtype ParamIndex = ParamIndex CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
--- | Index of a column in a result set.
---
--- Column indices start from 0.
+-- | Index of a column in a result set.  Column indices start from 0.
 newtype ColumnIndex = ColumnIndex CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
