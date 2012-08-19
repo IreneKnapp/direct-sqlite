@@ -7,6 +7,12 @@ module Database.SQLite3.Bindings (
     c_sqlite3_close,
     c_sqlite3_errmsg,
 
+    -- * Simple query execution
+    -- | <http://sqlite.org/c3ref/exec.html>
+    c_sqlite3_exec,
+    CExecCallback,
+    mkCExecCallback,
+
     -- * Statement management
     c_sqlite3_prepare_v2,
     c_sqlite3_step,
@@ -35,6 +41,9 @@ module Database.SQLite3.Bindings (
     c_sqlite3_column_int64,
     c_sqlite3_column_double,
     c_sqlite3_column_text,
+
+    -- * Miscellaneous
+    c_sqlite3_free,
 ) where
 
 import Database.SQLite3.Bindings.Types
@@ -56,10 +65,42 @@ foreign import ccall "sqlite3_errmsg"
     c_sqlite3_errmsg :: Ptr CDatabase -> IO CString
 
 
+foreign import ccall "sqlite3_exec"
+    c_sqlite3_exec
+        :: Ptr CDatabase
+        -> CString                  -- ^ SQL statement, UTF-8 encoded
+        -> FunPtr (CExecCallback a) -- ^ Optional callback function called for each row
+        -> Ptr a                    -- ^ Context passed to the callback
+        -> Ptr CString              -- ^ OUT: Error message string
+        -> IO CError
+
+type CExecCallback a
+     = Ptr a
+    -> ColumnCount  -- ^ Number of columns, which is the number of elements in
+                    --   the following arrays.
+    -> Ptr CString  -- ^ Array of column names
+    -> Ptr CString  -- ^ Array of column values, as returned by
+                    --   'c_sqlite3_column_text'.  Null values are represented
+                    --   as null pointers.
+    -> CInt         -- ^ If the callback returns non-zero, then
+                    --   'c_sqlite3_exec' returns @SQLITE_ABORT@
+                    --   ('ErrorAbort').
+
+-- | A couple important things to know about callbacks from Haskell code:
+--
+--  * If the callback throws an exception, apparently, the /whole program/ is
+--    terminated.
+--
+--  * Remember to call 'freeHaskellFunPtr' when you are done with the wrapper,
+--    to avoid leaking memory.
+foreign import ccall "wrapper"
+    mkCExecCallback :: CExecCallback a -> IO (FunPtr (CExecCallback a))
+
+
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 foreign import ccall "sqlite3_prepare_v2"
     c_sqlite3_prepare_v2
-        :: Ptr CDatabase        -- ^ Database handle
+        :: Ptr CDatabase
         -> CString              -- ^ SQL statement, UTF-8 encoded
         -> CNumBytes            -- ^ Maximum length of the SQL statement,
                                 --   in bytes.  If this is negative, then the
@@ -160,3 +201,8 @@ foreign import ccall "sqlite3_column_int64"
 
 foreign import ccall "sqlite3_column_double"
     c_sqlite3_column_double :: Ptr CStatement -> ColumnIndex -> IO Double
+
+
+-- | <http://sqlite.org/c3ref/free.html>
+foreign import ccall "sqlite3_free"
+    c_sqlite3_free :: Ptr a -> IO ()
