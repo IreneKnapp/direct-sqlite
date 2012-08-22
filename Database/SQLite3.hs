@@ -134,13 +134,35 @@ step :: Statement -> IO StepResult
 step statement =
     Direct.step statement >>= checkError Nothing "step"
 
+-- Note: sqlite3_reset and sqlite3_finalize return an error code if the most
+-- recent sqlite3_step indicated an error.  I think these are the only times
+-- these functions return an error (barring memory corruption and misuse of the API).
+--
+-- We don't replicate that behavior here.  Instead, 'reset' and 'finalize'
+-- discard the error.  Otherwise, we would get "double jeopardy".
+-- For example:
+--
+--  ok <- try $ step stmt :: IO (Either SQLError StepResult)
+--  finalize stmt
+--
+-- If 'finalize' threw its error, it would throw the exception the user was
+-- trying to catch.
+--
+-- 'reset' and 'finalize' might return a different error than the step that
+-- failed, leading to more cryptic error messages [1].  But we're not
+-- completely sure about this.
+--
+--  [1]: https://github.com/yesodweb/persistent/issues/92#issuecomment-7806421
+
 reset :: Statement -> IO ()
-reset statement =
-    Direct.reset statement >>= checkError Nothing "reset"
+reset statement = do
+    _ <- Direct.reset statement
+    return ()
 
 finalize :: Statement -> IO ()
-finalize statement =
-    Direct.finalize statement >>= checkError Nothing "finalize"
+finalize statement = do
+    _ <- Direct.finalize statement
+    return ()
 
 
 -- | This returns the index of the largest (rightmost) parameter.  Note that
