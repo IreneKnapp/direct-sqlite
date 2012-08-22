@@ -3,35 +3,63 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 module Database.SQLite3 (
-                         Database,
-                         Statement,
-                         Error(..),
-                         StepResult(Row,
-                                    Done),
-                         SQLData(SQLInteger,
-                                 SQLFloat,
-                                 SQLText,
-                                 SQLBlob,
-                                 SQLNull),
-                         open,
-                         close,
-                         prepare,
-                         step,
-                         reset,
-                         finalize,
-                         bindParameterCount,
-                         bindParameterName,
-                         bindBlob,
-                         bindDouble,
-                         bindInt,
-                         bindInt64,
-                         bindNull,
-                         bindText,
-                         bind,
-                         column,
-                         columns
-                        )
-    where
+    -- * Connection management
+    open,
+    close,
+    errmsg,
+
+    -- * Simple query execution
+    -- | <http://sqlite.org/c3ref/exec.html>
+    -- exec,
+
+    -- * Statement management
+    prepare,
+    step,
+    reset,
+    finalize,
+    -- clearBindings,
+
+    -- * Parameter and column information
+    bindParameterCount,
+    bindParameterName,
+    columnCount,
+
+    -- * Binding values to a prepared statement
+    -- | <http://www.sqlite.org/c3ref/bind_blob.html>
+    bind,
+    -- binds,
+    bindInt,
+    bindInt64,
+    bindDouble,
+    bindText,
+    bindBlob,
+    bindNull,
+
+    -- * Reading the result row
+    -- | <http://www.sqlite.org/c3ref/column_blob.html>
+    column,
+    columns,
+    columnType,
+    columnInt64,
+    columnDouble,
+    columnText,
+    columnBlob,
+
+    -- * Types
+    Database(..),
+    Statement(..),
+    SQLData(..),
+    ColumnType(..),
+
+    -- ** Results and errors
+    StepResult(..),
+    Error(..),
+
+    -- ** Special types
+    -- ParamIndex(..),
+    -- ColumnIndex(..),
+    -- ColumnCount,
+) where
 
 import Database.SQLite3.Direct
     ( Database
