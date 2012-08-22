@@ -33,8 +33,6 @@ module Database.SQLite3.Direct (
 
     -- * Binding values to a prepared statement
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
-    bind,
-    binds,
     bindInt64,
     bindDouble,
     bindText,
@@ -43,8 +41,6 @@ module Database.SQLite3.Direct (
 
     -- * Reading the result row
     -- | <http://www.sqlite.org/c3ref/column_blob.html>
-    column,
-    columns,
     columnType,
     columnInt64,
     columnDouble,
@@ -54,7 +50,6 @@ module Database.SQLite3.Direct (
     -- * Types
     Database(..),
     Statement(..),
-    SQLData(..),
     ColumnType(..),
 
     -- ** Results and errors
@@ -77,7 +72,6 @@ import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
 import Data.ByteString      (ByteString)
 import Data.String          (IsString(..))
-import Data.Typeable
 import Foreign
 import Foreign.C
 
@@ -91,14 +85,6 @@ data StepResult
     = Row
     | Done
     deriving (Eq, Show)
-
-data SQLData
-    = SQLInteger    !Int64
-    | SQLFloat      !Double
-    | SQLText       !Utf8
-    | SQLBlob       !ByteString
-    | SQLNull
-    deriving (Eq, Show, Typeable)
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
@@ -294,54 +280,3 @@ columnBlob (Statement stmt) idx = do
     ptr <- c_sqlite3_column_blob stmt idx
     len <- c_sqlite3_column_bytes stmt idx
     packCStringLen ptr len
-
--- | If the index is not between 1 and 'bindParameterCount' inclusive, this
--- returns @'Left' 'ErrorRange'@.  Otherwise, it succeeds, even if the query
--- skips this index by using numbered parameters.
---
--- Example:
---
--- >> Right stmt <- prepare conn "SELECT ?1, ?3, ?5"
--- >> bind stmt 1 (SQLInteger 1)
--- >Right ()
--- >> bind stmt 2 (SQLInteger 2)
--- >Right ()
--- >> bind stmt 6 (SQLInteger 6)
--- >Left ErrorRange
--- >> step stmt >> columns stmt
--- >[SQLInteger 1,SQLNull,SQLNull]
-bind :: Statement -> ParamIndex -> SQLData -> IO (Either Error ())
-bind statement idx datum =
-    case datum of
-        SQLInteger v -> bindInt64  statement idx v
-        SQLFloat   v -> bindDouble statement idx v
-        SQLText    v -> bindText   statement idx v
-        SQLBlob    v -> bindBlob   statement idx v
-        SQLNull      -> bindNull   statement idx
-
-column :: Statement -> ColumnIndex -> IO SQLData
-column statement idx = do
-    theType <- columnType statement idx
-    case theType of
-        IntegerColumn -> SQLInteger <$> columnInt64  statement idx
-        FloatColumn   -> SQLFloat   <$> columnDouble statement idx
-        TextColumn    -> SQLText    <$> columnText   statement idx
-        BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
-        NullColumn    -> return SQLNull
-
--- | If an error occurs, 'binds' stops and returns that error.
-binds :: Statement -> [SQLData] -> IO (Either Error ())
-binds statement sqlData =
-    loop $ zip [1..] sqlData
-  where
-    loop []                  = return $ Right ()
-    loop ((idx, datum) : xs) = do
-        result <- bind statement idx datum
-        case result of
-            Left err -> return $ Left err
-            Right _  -> loop xs
-
-columns :: Statement -> IO [SQLData]
-columns statement = do
-    count <- columnCount statement
-    mapM (column statement) [0..count-1]

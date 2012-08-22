@@ -27,7 +27,7 @@ module Database.SQLite3 (
     -- * Binding values to a prepared statement
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
     bind,
-    -- binds,
+    binds,
     bindInt,
     bindInt64,
     bindDouble,
@@ -55,24 +55,22 @@ module Database.SQLite3 (
     StepResult(..),
     Error(..),
 
-    -- ** Special types
-    -- ParamIndex(..),
-    -- ColumnIndex(..),
-    -- ColumnCount,
+    -- ** Special integers
+    ParamIndex(..),
+    ColumnIndex(..),
+    ColumnCount,
 ) where
 
 import Database.SQLite3.Direct
     ( Database
     , Statement
-    , Error(..)
-    , StepResult(..)
     , ColumnType(..)
+    , StepResult(..)
+    , Error(..)
+    , ParamIndex(..)
+    , ColumnIndex(..)
+    , ColumnCount
     , Utf8(..)
-    )
-import Database.SQLite3.Bindings.Types
-    ( fromParamIndex, toParamIndex
-    , toColumnIndex
-    , fromColumnCount
     )
 
 import qualified Database.SQLite3.Direct as Direct
@@ -82,18 +80,18 @@ import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
-import Control.Monad        (when)
+import Control.Monad        (when, zipWithM_)
 import Data.Int             (Int64)
 import Data.String          (fromString)
 import Data.Typeable
 
-
-data SQLData = SQLInteger Int64
-             | SQLFloat Double
-             | SQLText T.Text
-             | SQLBlob BS.ByteString
-             | SQLNull
-               deriving (Eq, Show, Typeable)
+data SQLData
+    = SQLInteger    !Int64
+    | SQLFloat      !Double
+    | SQLText       !T.Text
+    | SQLBlob       !BS.ByteString
+    | SQLNull
+    deriving (Eq, Show, Typeable)
 
 fromUtf8 :: Utf8 -> String
 fromUtf8 (Utf8 bs) = (T.unpack . T.decodeUtf8) bs
@@ -149,10 +147,9 @@ finalize statement =
 -- this is not necessarily the number of parameters.  If numbered parameters
 -- like @?5@ are used, there may be gaps in the list.
 --
--- See 'Database.SQLite3.Direct.ParamIndex' for more information.
-bindParameterCount :: Statement -> IO Int
-bindParameterCount stmt =
-    fromParamIndex <$> Direct.bindParameterCount stmt
+-- See 'ParamIndex' for more information.
+bindParameterCount :: Statement -> IO ParamIndex
+bindParameterCount = Direct.bindParameterCount
 
 -- | Return the N-th SQL parameter name.
 --
@@ -161,106 +158,104 @@ bindParameterCount stmt =
 -- @Nothing@.
 --
 -- Note that the parameter index starts at 1, not 0.
-bindParameterName :: Statement -> Int -> IO (Maybe String)
+bindParameterName :: Statement -> ParamIndex -> IO (Maybe String)
 bindParameterName stmt idx =
     fmap fromUtf8 <$>
-    Direct.bindParameterName stmt (toParamIndex idx)
+    Direct.bindParameterName stmt idx
 
-bindBlob :: Statement -> Int -> BS.ByteString -> IO ()
+bindBlob :: Statement -> ParamIndex -> BS.ByteString -> IO ()
 bindBlob statement parameterIndex byteString =
-    Direct.bindBlob statement (toParamIndex parameterIndex) byteString
+    Direct.bindBlob statement parameterIndex byteString
         >>= checkError Nothing "bind blob"
 
-bindDouble :: Statement -> Int -> Double -> IO ()
+bindDouble :: Statement -> ParamIndex -> Double -> IO ()
 bindDouble statement parameterIndex datum =
-    Direct.bindDouble statement (toParamIndex parameterIndex) datum
+    Direct.bindDouble statement parameterIndex datum
         >>= checkError Nothing "bind double"
 
-bindInt :: Statement -> Int -> Int -> IO ()
+bindInt :: Statement -> ParamIndex -> Int -> IO ()
 bindInt statement parameterIndex datum =
     Direct.bindInt64 statement
-                     (toParamIndex parameterIndex)
+                     parameterIndex
                      (fromIntegral datum)
         >>= checkError Nothing "bind int"
 
-bindInt64 :: Statement -> Int -> Int64 -> IO ()
+bindInt64 :: Statement -> ParamIndex -> Int64 -> IO ()
 bindInt64 statement parameterIndex datum =
-    Direct.bindInt64 statement
-                     (toParamIndex parameterIndex)
-                     datum
+    Direct.bindInt64 statement parameterIndex datum
         >>= checkError Nothing "bind int64"
 
-bindNull :: Statement -> Int -> IO ()
+bindNull :: Statement -> ParamIndex -> IO ()
 bindNull statement parameterIndex =
-    Direct.bindNull statement (toParamIndex parameterIndex)
+    Direct.bindNull statement parameterIndex
         >>= checkError Nothing "bind null"
 
-bindText :: Statement -> Int -> T.Text -> IO ()
+bindText :: Statement -> ParamIndex -> T.Text -> IO ()
 bindText statement parameterIndex text =
-    Direct.bindText statement
-                    (toParamIndex parameterIndex)
-                    (Utf8 $ T.encodeUtf8 text)
+    Direct.bindText statement parameterIndex (Utf8 $ T.encodeUtf8 text)
         >>= checkError Nothing "bind text"
 
-bind :: Statement -> [SQLData] -> IO ()
-bind statement sqlData = do
-  nParams <- bindParameterCount statement
-  when (nParams /= length sqlData) $
-    fail ("mismatched parameter count for bind.  Prepared statement "++
-          "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
-  mapM_ (\(parameterIndex, datum) -> do
-          case datum of
-            SQLInteger int64 -> bindInt64 statement parameterIndex int64
-            SQLFloat double -> bindDouble statement parameterIndex double
-            SQLText text -> bindText statement parameterIndex text
-            SQLBlob blob -> bindBlob statement parameterIndex blob
-            SQLNull -> bindNull statement parameterIndex)
-       $ zip [1..] sqlData
+-- | If the index is not between 1 and 'bindParameterCount' inclusive, this
+-- fails with 'ErrorRange'.  Otherwise, it succeeds, even if the query skips
+-- this index by using numbered parameters.
+--
+-- Example:
+--
+-- >> stmt <- prepare conn "SELECT ?1, ?3, ?5"
+-- >> bind stmt 1 (SQLInteger 1)
+-- >> bind stmt 2 (SQLInteger 2)
+-- >> bind stmt 6 (SQLInteger 6)
+-- >TODO
+-- >> step stmt >> columns stmt
+-- >[SQLInteger 1,SQLNull,SQLNull]
+bind :: Statement -> ParamIndex -> SQLData -> IO ()
+bind statement idx datum =
+    case datum of
+        SQLInteger v -> bindInt64  statement idx v
+        SQLFloat   v -> bindDouble statement idx v
+        SQLText    v -> bindText   statement idx v
+        SQLBlob    v -> bindBlob   statement idx v
+        SQLNull      -> bindNull   statement idx
 
-columnType :: Statement -> Int -> IO ColumnType
-columnType statement columnIndex =
-    Direct.columnType statement (toColumnIndex columnIndex)
+binds :: Statement -> [SQLData] -> IO ()
+binds statement sqlData = do
+    nParams <- fromIntegral <$> bindParameterCount statement
+    when (nParams /= length sqlData) $
+        fail ("mismatched parameter count for bind.  Prepared statement "++
+              "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
+    zipWithM_ (bind statement) [1..] sqlData
 
-columnBlob :: Statement -> Int -> IO BS.ByteString
-columnBlob statement columnIndex =
-    Direct.columnBlob statement (toColumnIndex columnIndex)
+columnType :: Statement -> ColumnIndex -> IO ColumnType
+columnType = Direct.columnType
 
-columnInt64 :: Statement -> Int -> IO Int64
-columnInt64 statement columnIndex =
-    Direct.columnInt64 statement (toColumnIndex columnIndex)
+columnBlob :: Statement -> ColumnIndex -> IO BS.ByteString
+columnBlob = Direct.columnBlob
 
-columnDouble :: Statement -> Int -> IO Double
-columnDouble statement columnIndex =
-    Direct.columnDouble statement (toColumnIndex columnIndex)
+columnInt64 :: Statement -> ColumnIndex -> IO Int64
+columnInt64 = Direct.columnInt64
 
-columnText :: Statement -> Int -> IO T.Text
+columnDouble :: Statement -> ColumnIndex -> IO Double
+columnDouble = Direct.columnDouble
+
+columnText :: Statement -> ColumnIndex -> IO T.Text
 columnText statement columnIndex = do
-    Utf8 bs <- Direct.columnText statement (toColumnIndex columnIndex)
+    Utf8 bs <- Direct.columnText statement columnIndex
     return $! T.decodeUtf8 bs
 
-columnCount :: Statement -> IO Int
-columnCount statement =
-    fromColumnCount <$> Direct.columnCount statement
+columnCount :: Statement -> IO ColumnCount
+columnCount = Direct.columnCount
 
-column :: Statement -> Int -> IO SQLData
-column statement columnIndex = do
-  theType <- columnType statement columnIndex
-  case theType of
-    IntegerColumn -> do
-                 int64 <- columnInt64 statement columnIndex
-                 return $ SQLInteger int64
-    FloatColumn -> do
-                 double <- columnDouble statement columnIndex
-                 return $ SQLFloat double
-    TextColumn -> do
-                 text <- columnText statement columnIndex
-                 return $ SQLText text
-    BlobColumn -> do
-                 byteString <- columnBlob statement columnIndex
-                 return $ SQLBlob byteString
-    NullColumn -> return SQLNull
+column :: Statement -> ColumnIndex -> IO SQLData
+column statement idx = do
+    theType <- columnType statement idx
+    case theType of
+        IntegerColumn -> SQLInteger <$> columnInt64  statement idx
+        FloatColumn   -> SQLFloat   <$> columnDouble statement idx
+        TextColumn    -> SQLText    <$> columnText   statement idx
+        BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
+        NullColumn    -> return SQLNull
 
 columns :: Statement -> IO [SQLData]
 columns statement = do
-  count <- columnCount statement
-  mapM (\i -> column statement i) [0..count-1]
+    count <- columnCount statement
+    mapM (column statement) [0..count-1]
