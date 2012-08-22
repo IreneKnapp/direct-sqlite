@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# OPTIONS -fno-warn-name-shadowing #-}
 module Database.SQLite3 (
     -- * Connection management
     open,
@@ -49,6 +48,7 @@ module Database.SQLite3 (
     Database(..),
     Statement(..),
     SQLData(..),
+    SQLError(..),
     ColumnType(..),
 
     -- ** Results and errors
@@ -85,6 +85,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
+import Control.Exception    (Exception, throwIO)
 import Control.Monad        (when, zipWithM_)
 import Data.Int             (Int64)
 import Data.String          (fromString)
@@ -97,6 +98,33 @@ data SQLData
     | SQLBlob       !BS.ByteString
     | SQLNull
     deriving (Eq, Show, Typeable)
+
+-- | Exception thrown when SQLite3 reports an error.
+--
+-- direct-sqlite may throw other types of exceptions if you misuse the API.
+data SQLError = SQLError
+    { sqlError          :: !Error
+        -- ^ Error code returned by API call
+    , sqlErrorDetails   :: Maybe String
+        -- ^ Text describing the error, if available
+    , sqlErrorContext   :: String
+        -- ^ Indicates what action produced this error,
+        --   e.g. @exec \"SELECT * FROM foo\"@
+    }
+    deriving Typeable
+
+instance Show SQLError where
+    show SQLError{ sqlError        = code
+                 , sqlErrorDetails = details
+                 , sqlErrorContext = context
+                 }
+         = "SQLite3 returned " ++ show code
+        ++ " while attempting to perform " ++ context
+        ++ case details of
+               Nothing -> "."
+               Just s  -> ": " ++ s
+
+instance Exception SQLError
 
 fromUtf8 :: Utf8 -> String
 fromUtf8 (Utf8 bs) = (T.unpack . T.decodeUtf8) bs
@@ -112,25 +140,27 @@ data DetailSource
     | DetailDatabase Database
     | DetailMessage  Utf8
 
-renderDetailSource :: DetailSource -> IO String
+renderDetailSource :: DetailSource -> IO (Maybe String)
 renderDetailSource src = case src of
     DetailNone ->
-        return "."
+        return Nothing
     DetailDatabase db -> do
         details <- errmsg db
-        return $ ": " ++ details
+        return $ Just details
     DetailMessage utf8 ->
-        return $ ": " ++ fromUtf8 utf8
+        return $ Just $ fromUtf8 utf8
 
-sqlError :: DetailSource -> String -> Error -> IO a
-sqlError detailSource functionName error = do
-  details <- renderDetailSource detailSource
-  fail $ "SQLite3 returned " ++ (show error)
-         ++ " while attempting to perform " ++ functionName
-         ++ details
+throwSQLError :: DetailSource -> String -> Error -> IO a
+throwSQLError detailSource context error = do
+    details <- renderDetailSource detailSource
+    throwIO SQLError
+        { sqlError        = error
+        , sqlErrorDetails = details
+        , sqlErrorContext = context
+        }
 
 checkError :: DetailSource -> String -> Either Error a -> IO a
-checkError ds fn = either (sqlError ds fn) return
+checkError ds fn = either (throwSQLError ds fn) return
 
 open :: String -> IO Database
 open path = do
@@ -147,7 +177,7 @@ exec db sql =
         >>= checkErrorMsg ("exec " ++ show sql)
   where
     checkErrorMsg fn result = case result of
-        Left (err, msg) -> sqlError (DetailMessage msg) fn err
+        Left (err, msg) -> throwSQLError (DetailMessage msg) fn err
         Right ()        -> return ()
 
 prepare :: Database -> String -> IO Statement
