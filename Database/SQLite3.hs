@@ -10,14 +10,14 @@ module Database.SQLite3 (
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
-    -- exec,
+    exec,
 
     -- * Statement management
     prepare,
     step,
     reset,
     finalize,
-    -- clearBindings,
+    clearBindings,
 
     -- * Parameter and column information
     bindParameterCount,
@@ -71,6 +71,11 @@ import Database.SQLite3.Direct
     , ColumnIndex(..)
     , ColumnCount
     , Utf8(..)
+
+    -- Re-exported from Database.SQLite3.Direct without modification.
+    -- Note that if this module were in another package, source links would not
+    -- be generated for these functions.
+    , clearBindings
     )
 
 import qualified Database.SQLite3.Direct as Direct
@@ -135,6 +140,15 @@ open path = do
 close :: Database -> IO ()
 close db =
     Direct.close db >>= checkError (DetailDatabase db) "close"
+
+exec :: Database -> String -> IO ()
+exec db sql =
+    Direct.exec db (toUtf8 sql)
+        >>= checkErrorMsg ("exec " ++ show sql)
+  where
+    checkErrorMsg fn result = case result of
+        Left (err, msg) -> sqlError (DetailMessage msg) fn err
+        Right ()        -> return ()
 
 prepare :: Database -> String -> IO Statement
 prepare db sql =
