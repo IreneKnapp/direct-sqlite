@@ -102,37 +102,48 @@ toUtf8 = fromString
 errmsg :: Database -> IO String
 errmsg db = fromUtf8 <$> Direct.errmsg db
 
-sqlError :: Maybe Database -> String -> Error -> IO a
-sqlError maybeDatabase functionName error = do
-  details <- case maybeDatabase of
-               Just database -> do
-                 details <- errmsg database
-                 return $ ": " ++ details
-               Nothing -> return "."
+data DetailSource
+    = DetailNone
+    | DetailDatabase Database
+    | DetailMessage  Utf8
+
+renderDetailSource :: DetailSource -> IO String
+renderDetailSource src = case src of
+    DetailNone ->
+        return "."
+    DetailDatabase db -> do
+        details <- errmsg db
+        return $ ": " ++ details
+    DetailMessage utf8 ->
+        return $ ": " ++ fromUtf8 utf8
+
+sqlError :: DetailSource -> String -> Error -> IO a
+sqlError detailSource functionName error = do
+  details <- renderDetailSource detailSource
   fail $ "SQLite3 returned " ++ (show error)
          ++ " while attempting to perform " ++ functionName
          ++ details
 
-checkError :: Maybe Database -> String -> Either Error a -> IO a
-checkError db fn = either (sqlError db fn) return
+checkError :: DetailSource -> String -> Either Error a -> IO a
+checkError ds fn = either (sqlError ds fn) return
 
 open :: String -> IO Database
 open path = do
     Direct.open (toUtf8 path)
-        >>= checkError Nothing ("open " ++ show path)
+        >>= checkError DetailNone ("open " ++ show path)
 
 close :: Database -> IO ()
 close db =
-    Direct.close db >>= checkError (Just db) "close"
+    Direct.close db >>= checkError (DetailDatabase db) "close"
 
 prepare :: Database -> String -> IO Statement
 prepare db sql =
     Direct.prepare db (toUtf8 sql) >>=
-        checkError (Just db) ("prepare " ++ (show sql))
+        checkError (DetailDatabase db) ("prepare " ++ (show sql))
 
 step :: Statement -> IO StepResult
 step statement =
-    Direct.step statement >>= checkError Nothing "step"
+    Direct.step statement >>= checkError DetailNone "step"
 
 -- Note: sqlite3_reset and sqlite3_finalize return an error code if the most
 -- recent sqlite3_step indicated an error.  I think these are the only times
@@ -188,34 +199,34 @@ bindParameterName stmt idx =
 bindBlob :: Statement -> ParamIndex -> BS.ByteString -> IO ()
 bindBlob statement parameterIndex byteString =
     Direct.bindBlob statement parameterIndex byteString
-        >>= checkError Nothing "bind blob"
+        >>= checkError DetailNone "bind blob"
 
 bindDouble :: Statement -> ParamIndex -> Double -> IO ()
 bindDouble statement parameterIndex datum =
     Direct.bindDouble statement parameterIndex datum
-        >>= checkError Nothing "bind double"
+        >>= checkError DetailNone "bind double"
 
 bindInt :: Statement -> ParamIndex -> Int -> IO ()
 bindInt statement parameterIndex datum =
     Direct.bindInt64 statement
                      parameterIndex
                      (fromIntegral datum)
-        >>= checkError Nothing "bind int"
+        >>= checkError DetailNone "bind int"
 
 bindInt64 :: Statement -> ParamIndex -> Int64 -> IO ()
 bindInt64 statement parameterIndex datum =
     Direct.bindInt64 statement parameterIndex datum
-        >>= checkError Nothing "bind int64"
+        >>= checkError DetailNone "bind int64"
 
 bindNull :: Statement -> ParamIndex -> IO ()
 bindNull statement parameterIndex =
     Direct.bindNull statement parameterIndex
-        >>= checkError Nothing "bind null"
+        >>= checkError DetailNone "bind null"
 
 bindText :: Statement -> ParamIndex -> T.Text -> IO ()
 bindText statement parameterIndex text =
     Direct.bindText statement parameterIndex (Utf8 $ T.encodeUtf8 text)
-        >>= checkError Nothing "bind text"
+        >>= checkError DetailNone "bind text"
 
 -- | If the index is not between 1 and 'bindParameterCount' inclusive, this
 -- fails with 'ErrorRange'.  Otherwise, it succeeds, even if the query skips
