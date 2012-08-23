@@ -311,6 +311,8 @@ bind statement idx datum =
         SQLBlob    v -> bindBlob   statement idx v
         SQLNull      -> bindNull   statement idx
 
+-- | Convenience function for binding values to all parameters.  This will
+-- 'fail' if the list has the wrong number of parameters.
 binds :: Statement -> [SQLData] -> IO ()
 binds statement sqlData = do
     nParams <- fromIntegral <$> bindParameterCount statement
