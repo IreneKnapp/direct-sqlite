@@ -112,11 +112,19 @@ data CStatement
 -- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
 -- parameter placeholders, and how parameter indices are assigned.
 newtype ParamIndex = ParamIndex CInt
-    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show ParamIndex where
+    show (ParamIndex n) = show n
 
 -- | Index of a column in a result set.  Column indices start from 0.
 newtype ColumnIndex = ColumnIndex CInt
-    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show ColumnIndex where
+    show (ColumnIndex n) = show n
 
 -- | Number of columns in a result set.
 type ColumnCount = ColumnIndex
