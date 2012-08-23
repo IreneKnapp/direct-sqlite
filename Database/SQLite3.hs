@@ -77,11 +77,11 @@ import Database.SQLite3.Direct
     -- be generated for these functions.
     , clearBindings
     , bindParameterCount
+    , columnCount
     , columnType
     , columnBlob
     , columnInt64
     , columnDouble
-    , columnCount
     )
 
 import qualified Database.SQLite3.Direct as Direct
@@ -138,9 +138,6 @@ fromUtf8 (Utf8 bs) = (T.unpack . T.decodeUtf8) bs
 toUtf8 :: String -> Utf8
 toUtf8 = fromString
 
-errmsg :: Database -> IO String
-errmsg db = fromUtf8 <$> Direct.errmsg db
-
 data DetailSource
     = DetailNone
     | DetailDatabase Database
@@ -168,15 +165,22 @@ throwSQLError detailSource context error = do
 checkError :: DetailSource -> String -> Either Error a -> IO a
 checkError ds fn = either (throwSQLError ds fn) return
 
+-- | <http://www.sqlite.org/c3ref/open.html>
 open :: String -> IO Database
 open path = do
     Direct.open (toUtf8 path)
         >>= checkError DetailNone ("open " ++ show path)
 
+-- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO ()
 close db =
     Direct.close db >>= checkError (DetailDatabase db) "close"
 
+-- | <http://www.sqlite.org/c3ref/errcode.html>
+errmsg :: Database -> IO String
+errmsg db = fromUtf8 <$> Direct.errmsg db
+
+-- | Execute one or more SQL statements delimited by semicolons.
 exec :: Database -> String -> IO ()
 exec db sql =
     Direct.exec db (toUtf8 sql)
@@ -186,11 +190,16 @@ exec db sql =
         Left (err, msg) -> throwSQLError (DetailMessage msg) fn err
         Right ()        -> return ()
 
+-- | <http://www.sqlite.org/c3ref/prepare.html>
+--
+-- Unlike 'exec', 'prepare' only executes the first statement, and ignores
+-- subsequent statements.
 prepare :: Database -> String -> IO Statement
 prepare db sql =
     Direct.prepare db (toUtf8 sql) >>=
         checkError (DetailDatabase db) ("prepare " ++ (show sql))
 
+-- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO StepResult
 step statement =
     Direct.step statement >>= checkError DetailNone "step"
@@ -215,18 +224,28 @@ step statement =
 --
 --  [1]: https://github.com/yesodweb/persistent/issues/92#issuecomment-7806421
 
+-- | <http://www.sqlite.org/c3ref/reset.html>
+--
+-- Note that in the C API, @sqlite3_reset@ returns an error code if the most
+-- recent @sqlite3_step@ indicated an error.  We do not replicate that behavior
+-- here.  'reset' never throws an exception.
 reset :: Statement -> IO ()
 reset statement = do
     _ <- Direct.reset statement
     return ()
 
+-- | <http://www.sqlite.org/c3ref/finalize.html>
+--
+-- Like 'reset', 'finalize' never throws an exception.
 finalize :: Statement -> IO ()
 finalize statement = do
     _ <- Direct.finalize statement
     return ()
 
 
--- | Return the N-th SQL parameter name.
+-- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
+--
+-- Return the N-th SQL parameter name.
 --
 -- Named parameters are returned as-is.  E.g. \":v\" is returned as
 -- @Just \":v\"@.  Unnamed parameters, however, are converted to
@@ -280,7 +299,7 @@ bindText statement parameterIndex text =
 -- >> bind stmt 1 (SQLInteger 1)
 -- >> bind stmt 2 (SQLInteger 2)
 -- >> bind stmt 6 (SQLInteger 6)
--- >TODO
+-- >*** Exception: SQLite3 returned ErrorRange while attempting to perform bind int64.
 -- >> step stmt >> columns stmt
 -- >[SQLInteger 1,SQLNull,SQLNull]
 bind :: Statement -> ParamIndex -> SQLData -> IO ()

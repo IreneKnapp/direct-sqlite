@@ -152,7 +152,6 @@ errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
 
--- | Execute one or more SQL statements delimited by semicolons.
 exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
 exec (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
@@ -167,9 +166,6 @@ exec (Database db) (Utf8 sql) =
             Right () -> return $ Right ()
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
---
--- Unlike 'exec', 'prepare' only executes the first statement, and ignores
--- subsequent statements.
 prepare :: Database -> Utf8 -> IO (Either Error Statement)
 prepare (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->

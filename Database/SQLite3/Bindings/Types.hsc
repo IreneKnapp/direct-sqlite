@@ -97,7 +97,7 @@ data CStatement
 -- | Index of a parameter in a parameterized query.
 -- Parameter indices start from 1.
 --
--- When a query is 'Database.SQLite3.Direct.prepare'd, SQLite allocates an
+-- When a query is 'Database.SQLite3.prepare'd, SQLite allocates an
 -- array indexed from 1 to the highest parameter index.  For example:
 --
 -- >>Right stmt <- prepare conn "SELECT ?1, ?5, ?3, ?"
@@ -106,7 +106,7 @@ data CStatement
 --
 -- This will allocate an array indexed from 1 to 6 (@?@ takes the highest
 -- preceding index plus one).  The array is initialized with null values.
--- When you 'Database.SQLite3.Direct.bind' a parameter, it assigns a new value
+-- When you 'Database.SQLite3.bind' a parameter, it assigns a new value
 -- to one of these indices.
 --
 -- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
