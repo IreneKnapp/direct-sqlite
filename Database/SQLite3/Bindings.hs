@@ -53,6 +53,8 @@ import Foreign.C
 
 
 -- | <http://www.sqlite.org/c3ref/open.html>
+--
+-- This sets the @'Ptr CDatabase'@ even on failure.
 foreign import ccall "sqlite3_open"
     c_sqlite3_open :: CString -> Ptr (Ptr CDatabase) -> IO CError
 

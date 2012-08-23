@@ -162,11 +162,16 @@ throwSQLError detailSource context error = do
 checkError :: DetailSource -> String -> Either Error a -> IO a
 checkError ds fn = either (throwSQLError ds fn) return
 
+checkErrorMsg :: String -> Either (Error, Utf8) a -> IO a
+checkErrorMsg fn result = case result of
+    Left (err, msg) -> throwSQLError (DetailMessage msg) fn err
+    Right a         -> return a
+
 -- | <http://www.sqlite.org/c3ref/open.html>
 open :: String -> IO Database
 open path =
     Direct.open (toUtf8 path)
-        >>= checkError DetailNone ("open " ++ show path)
+        >>= checkErrorMsg ("open " ++ show path)
 
 -- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO ()
@@ -178,10 +183,6 @@ exec :: Database -> String -> IO ()
 exec db sql =
     Direct.exec db (toUtf8 sql)
         >>= checkErrorMsg ("exec " ++ show sql)
-  where
-    checkErrorMsg fn result = case result of
-        Left (err, msg) -> throwSQLError (DetailMessage msg) fn err
-        Right ()        -> return ()
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --

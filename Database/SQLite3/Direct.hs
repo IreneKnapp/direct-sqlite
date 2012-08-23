@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# OPTIONS -fno-warn-name-shadowing #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
 --
@@ -137,12 +136,21 @@ toStepResult code =
 ------------------------------------------------------------------------
 
 -- | <http://www.sqlite.org/c3ref/open.html>
-open :: Utf8 -> IO (Either Error Database)
+open :: Utf8 -> IO (Either (Error, Utf8) Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
-        alloca $ \database ->
-            c_sqlite3_open path' database >>=
-                toResultM (Database <$> peek database)
+    alloca $ \database -> do
+        rc <- c_sqlite3_open path' database
+        db <- Database <$> peek database
+            -- sqlite3_open returns a sqlite3 even on failure.
+            -- That's where we get a more descriptive error message.
+        case toResult () rc of
+            Left err -> do
+                msg <- errmsg db -- This returns "out of memory" if db is null.
+                _   <- close db  -- This is harmless if db is null.
+                return $ Left (err, msg)
+            Right () ->
+                return $ Right db
 
 -- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())
@@ -157,11 +165,11 @@ errmsg (Database db) =
 exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
 exec (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
-    alloca $ \errmsg -> do
-        rc <- c_sqlite3_exec db sql' nullFunPtr nullPtr errmsg
+    alloca $ \msgPtrOut -> do
+        rc <- c_sqlite3_exec db sql' nullFunPtr nullPtr msgPtrOut
         case toResult () rc of
             Left err -> do
-                msgPtr <- peek errmsg
+                msgPtr <- peek msgPtrOut
                 msg <- packUtf8 (Utf8 BS.empty) id msgPtr
                 c_sqlite3_free msgPtr
                 return $ Left (err, msg)
