@@ -76,6 +76,12 @@ import Database.SQLite3.Direct
     -- Note that if this module were in another package, source links would not
     -- be generated for these functions.
     , clearBindings
+    , bindParameterCount
+    , columnType
+    , columnBlob
+    , columnInt64
+    , columnDouble
+    , columnCount
     )
 
 import qualified Database.SQLite3.Direct as Direct
@@ -220,14 +226,6 @@ finalize statement = do
     return ()
 
 
--- | This returns the index of the largest (rightmost) parameter.  Note that
--- this is not necessarily the number of parameters.  If numbered parameters
--- like @?5@ are used, there may be gaps in the list.
---
--- See 'ParamIndex' for more information.
-bindParameterCount :: Statement -> IO ParamIndex
-bindParameterCount = Direct.bindParameterCount
-
 -- | Return the N-th SQL parameter name.
 --
 -- Named parameters are returned as-is.  E.g. \":v\" is returned as
@@ -302,25 +300,10 @@ binds statement sqlData = do
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
     zipWithM_ (bind statement) [1..] sqlData
 
-columnType :: Statement -> ColumnIndex -> IO ColumnType
-columnType = Direct.columnType
-
-columnBlob :: Statement -> ColumnIndex -> IO BS.ByteString
-columnBlob = Direct.columnBlob
-
-columnInt64 :: Statement -> ColumnIndex -> IO Int64
-columnInt64 = Direct.columnInt64
-
-columnDouble :: Statement -> ColumnIndex -> IO Double
-columnDouble = Direct.columnDouble
-
 columnText :: Statement -> ColumnIndex -> IO T.Text
 columnText statement columnIndex = do
     Utf8 bs <- Direct.columnText statement columnIndex
     return $! T.decodeUtf8 bs
-
-columnCount :: Statement -> IO ColumnCount
-columnCount = Direct.columnCount
 
 column :: Statement -> ColumnIndex -> IO SQLData
 column statement idx = do
