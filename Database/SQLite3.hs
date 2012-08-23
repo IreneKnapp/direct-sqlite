@@ -25,8 +25,8 @@ module Database.SQLite3 (
 
     -- * Binding values to a prepared statement
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
+    bindSQLData,
     bind,
-    binds,
     bindInt,
     bindInt64,
     bindDouble,
@@ -296,14 +296,14 @@ bindText statement parameterIndex text =
 -- Example:
 --
 -- >> stmt <- prepare conn "SELECT ?1, ?3, ?5"
--- >> bind stmt 1 (SQLInteger 1)
--- >> bind stmt 2 (SQLInteger 2)
--- >> bind stmt 6 (SQLInteger 6)
+-- >> bindSQLData stmt 1 (SQLInteger 1)
+-- >> bindSQLData stmt 2 (SQLInteger 2)
+-- >> bindSQLData stmt 6 (SQLInteger 6)
 -- >*** Exception: SQLite3 returned ErrorRange while attempting to perform bind int64.
 -- >> step stmt >> columns stmt
 -- >[SQLInteger 1,SQLNull,SQLNull]
-bind :: Statement -> ParamIndex -> SQLData -> IO ()
-bind statement idx datum =
+bindSQLData :: Statement -> ParamIndex -> SQLData -> IO ()
+bindSQLData statement idx datum =
     case datum of
         SQLInteger v -> bindInt64  statement idx v
         SQLFloat   v -> bindDouble statement idx v
@@ -313,13 +313,13 @@ bind statement idx datum =
 
 -- | Convenience function for binding values to all parameters.  This will
 -- 'fail' if the list has the wrong number of parameters.
-binds :: Statement -> [SQLData] -> IO ()
-binds statement sqlData = do
+bind :: Statement -> [SQLData] -> IO ()
+bind statement sqlData = do
     nParams <- fromIntegral <$> bindParameterCount statement
     when (nParams /= length sqlData) $
         fail ("mismatched parameter count for bind.  Prepared statement "++
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
-    zipWithM_ (bind statement) [1..] sqlData
+    zipWithM_ (bindSQLData statement) [1..] sqlData
 
 columnText :: Statement -> ColumnIndex -> IO T.Text
 columnText statement columnIndex = do

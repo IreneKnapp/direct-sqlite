@@ -48,7 +48,7 @@ testBind TestEnv{..} = TestCase $ do
   where
     testBind1 stmt = do
       let params =  [SQLInteger 3]
-      binds stmt params
+      bind stmt params
       Row <- step stmt
       res <- columns stmt
       Done <- step stmt
@@ -56,7 +56,7 @@ testBind TestEnv{..} = TestCase $ do
 
     testBind2 stmt = do
       let params =  [SQLInteger 1, SQLInteger 1]
-      binds stmt params
+      bind stmt params
       Row <- step stmt
       res <- columns stmt
       Done <- step stmt
@@ -94,9 +94,9 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
   bracket (prepare conn "SELECT ?") finalize (\stmt -> assertBindErrorCaught (testException2 stmt))
   where
     -- Invalid use, one param in q string, none given
-    testException1 stmt = binds stmt []
+    testException1 stmt = bind stmt []
     -- Invalid use, one param in q string, 2 given
-    testException2 stmt = binds stmt [SQLInteger 1, SQLInteger 2]
+    testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
 
 -- | Action for connecting to the database that will be used for
 -- testing.

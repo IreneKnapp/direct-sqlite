@@ -106,8 +106,8 @@ data CStatement
 --
 -- This will allocate an array indexed from 1 to 6 (@?@ takes the highest
 -- preceding index plus one).  The array is initialized with null values.
--- When you 'Database.SQLite3.bind' a parameter, it assigns a new value
--- to one of these indices.
+-- When you bind a parameter with 'Database.SQLite3.bindSQLData', it assigns a
+-- new value to one of these indices.
 --
 -- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
 -- parameter placeholders, and how parameter indices are assigned.
