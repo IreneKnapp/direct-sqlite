@@ -1,13 +1,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import Prelude hiding (catch)
-import Control.Exception (IOException, bracket, catch)
-import Control.Monad     (when)
-import System.Exit       (exitFailure)
+import Database.SQLite3
+
+import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
+                                -- as Prelude no longer exports catch.
+import Control.Exception    (IOException, bracket)
+import Control.Monad        (when)
+import System.Directory
+import System.Exit          (exitFailure)
 import System.IO
+import System.IO.Error      (isDoesNotExistError)
 import Test.HUnit
 
-import Database.SQLite3
+import qualified Control.Exception as E
 
 data TestEnv =
   TestEnv {
@@ -15,6 +20,8 @@ data TestEnv =
     -- ^ Database shared by all the tests
   , withConn :: forall a. (Database -> IO a) -> IO a
     -- ^ Bracket for spawning additional connections
+  , withConnShared :: forall a. (Database -> IO a) -> IO a
+    -- ^ Like 'withConn', but every invocation shares the same database.
   }
 
 tests :: [TestEnv -> Test]
@@ -28,7 +35,7 @@ tests =
 
 assertBindErrorCaught :: IO a -> Assertion
 assertBindErrorCaught action = do
-  catch (action >> return False) (\(_err :: IOException) -> return True) >>=
+  E.catch (action >> return False) (\(_err :: IOException) -> return True) >>=
     assertBool "assertExceptionCaught"
 
 -- Simplest SELECT
@@ -98,28 +105,33 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
     -- Invalid use, one param in q string, 2 given
     testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
 
--- | Action for connecting to the database that will be used for
--- testing.
---
--- Note that some tests, such as Notify, use multiple connections, and
--- assume that 'testConnect' connects to the same database every time
--- it is called.
-testConnect :: IO Database
-testConnect = open ":memory:"
+sharedDBPath :: String
+sharedDBPath = "dist/test/direct-sqlite-test-database.db"
 
 withTestEnv :: (TestEnv -> IO a) -> IO a
 withTestEnv cb =
     withConn $ \conn ->
         cb TestEnv
-            { conn     = conn
-            , withConn = withConn
+            { conn           = conn
+            , withConn       = withConn
+            , withConnShared = withConnPath sharedDBPath
             }
   where
-    withConn = bracket testConnect close
+    withConn          = withConnPath ":memory:"
+    withConnPath path = bracket (open path) close
 
 main :: IO ()
 main = do
   mapM_ (`hSetBuffering` LineBuffering) [stdout, stderr]
+
+  putStrLn $ "Creating " ++ sharedDBPath
+  E.handleJust (\e -> if isDoesNotExistError e
+                         then Just ()
+                         else Nothing)
+               (\_ -> return ())
+               (removeFile sharedDBPath)
+  open sharedDBPath >>= close
+
   Counts{cases, tried, errors, failures} <-
     withTestEnv $ \env -> runTestTT $ TestList $ map ($ env) tests
   when (cases /= tried || errors /= 0 || failures /= 0) $ exitFailure

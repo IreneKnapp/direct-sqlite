@@ -68,6 +68,7 @@ test-suite test
   build-depends: base
                , base16-bytestring
                , bytestring
+               , directory
                , HUnit
                , direct-sqlite
                , text
