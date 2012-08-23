@@ -73,10 +73,10 @@ import Foreign
 import Foreign.C
 
 newtype Database = Database (Ptr CDatabase)
-    deriving Show
+    deriving (Eq, Show)
 
 newtype Statement = Statement (Ptr CStatement)
-    deriving Show
+    deriving (Eq, Show)
 
 data StepResult
     = Row
