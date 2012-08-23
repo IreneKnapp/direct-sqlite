@@ -45,8 +45,8 @@ module Database.SQLite3 (
     columnBlob,
 
     -- * Types
-    Database(..),
-    Statement(..),
+    Database,
+    Statement,
     SQLData(..),
     SQLError(..),
     ColumnType(..),
