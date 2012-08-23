@@ -18,13 +18,15 @@ description:
   but is slightly higher-level, in that it supports marshalling of data values to and
   from the database.  In particular, it supports strings encoded as UTF8, and BLOBs
   represented as ByteStrings.
-  
-  Version 2.0 uses Text for strings instead of String.
-  
-  Version 1.1.0.1 switches to the Faction packaging system and makes no other
+  .
+  Release history:
+  .
+  [2.0] uses Text for strings instead of String.
+  .
+  [1.1.0.1] switches to the Faction packaging system and makes no other
   changes.
-  
-  Version 1.1 adds the SQLite amalgamation file (version 3.7.5) to the project, so that
+  .
+  [1.1] adds the SQLite amalgamation file (version 3.7.5) to the project, so that
   there are no external dependencies.
 
 extra-source-files:
