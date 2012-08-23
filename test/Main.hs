@@ -48,7 +48,7 @@ testBind TestEnv{..} = TestCase $ do
   where
     testBind1 stmt = do
       let params =  [SQLInteger 3]
-      bind stmt params
+      binds stmt params
       Row <- step stmt
       res <- columns stmt
       Done <- step stmt
@@ -56,7 +56,7 @@ testBind TestEnv{..} = TestCase $ do
 
     testBind2 stmt = do
       let params =  [SQLInteger 1, SQLInteger 1]
-      bind stmt params
+      binds stmt params
       Row <- step stmt
       res <- columns stmt
       Done <- step stmt
@@ -83,7 +83,7 @@ testBindParamName TestEnv{..} = TestCase $ do
   where
     testNames names stmt = do
       count <- bindParameterCount stmt
-      assertEqual "count match" count (length names)
+      assertEqual "count match" count (fromIntegral $ length names)
       mapM_ (\(ndx,expecting) -> do
                 name <- bindParameterName stmt ndx
                 assertEqual "name match" expecting name) $ zip [1..] names
@@ -94,9 +94,9 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
   bracket (prepare conn "SELECT ?") finalize (\stmt -> assertBindErrorCaught (testException2 stmt))
   where
     -- Invalid use, one param in q string, none given
-    testException1 stmt = bind stmt []
+    testException1 stmt = binds stmt []
     -- Invalid use, one param in q string, 2 given
-    testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
+    testException2 stmt = binds stmt [SQLInteger 1, SQLInteger 2]
 
 -- | Action for connecting to the database that will be used for
 -- testing.
