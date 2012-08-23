@@ -180,7 +180,7 @@ close db =
 errmsg :: Database -> IO String
 errmsg db = fromUtf8 <$> Direct.errmsg db
 
--- | Execute one or more SQL statements delimited by semicolons.
+-- | Execute zero or more SQL statements delimited by semicolons.
 exec :: Database -> String -> IO ()
 exec db sql =
     Direct.exec db (toUtf8 sql)
