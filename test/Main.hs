@@ -78,6 +78,19 @@ testBindParamCounts TestEnv{..} = TestCase $ do
   assertEqual "3 unique ?NNNs" 3 nParams
   nParams <- bracket (prepare conn "SELECT (?+?+?)") finalize bindParameterCount
   assertEqual "3 positional" 3 nParams
+  nParams <- bracket (prepare conn "SELECT ?3, ?5, ?1") finalize bindParameterCount
+  assertEqual "5 params, 2 gaps" 5 nParams
+  nParams <- bracket (prepare conn "SELECT ?3, ?5, ?1, ?") finalize bindParameterCount
+  assertEqual "6 params, 2 gaps, last param index automatic" 6 nParams
+  nParams <- bracket (prepare conn "SELECT ?, ?5, ?, ?2, ?, ?6, ?") finalize bindParameterCount
+  assertEqual "8 params, with automatic indices and overlap" 8 nParams
+    -- 8 because ? grabs an index one greater than the highest index of all
+    -- previous parameters, not just the most recent index.
+  testCase "0 placeholders" "SELECT 1" 0
+  where
+    testCase label query expected =
+        bracket (prepare conn query) finalize bindParameterCount
+            >>= assertEqual label expected
 
 -- Test bindParameterName
 testBindParamName :: TestEnv -> Test
