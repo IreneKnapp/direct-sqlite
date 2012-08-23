@@ -27,16 +27,6 @@ module Database.SQLite3.Bindings.Types (
     CNumBytes(..),
     CDestructor,
     c_SQLITE_TRANSIENT,
-
-    -- * Conversion helpers
-    fromParamIndex,
-    fromColumnIndex,
-    fromColumnCount,
-    fromCNumBytes,
-    toParamIndex,
-    toColumnIndex,
-    toColumnCount,
-    toCNumBytes,
 ) where
 
 #include "sqlite3.h"
@@ -131,30 +121,6 @@ type ColumnCount = ColumnIndex
 
 newtype CNumBytes = CNumBytes CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
-
-fromParamIndex :: Num a => ParamIndex -> a
-fromParamIndex = fromIntegral
-
-fromColumnIndex :: Num a => ColumnIndex -> a
-fromColumnIndex = fromIntegral
-
-fromColumnCount :: Num a => ColumnCount -> a
-fromColumnCount = fromIntegral
-
-fromCNumBytes :: Num a => CNumBytes -> a
-fromCNumBytes = fromIntegral
-
-toParamIndex :: Integral a => a -> ParamIndex
-toParamIndex = fromIntegral
-
-toColumnIndex :: Integral a => a -> ColumnIndex
-toColumnIndex = fromIntegral
-
-toColumnCount :: Integral a => a -> ColumnCount
-toColumnCount = fromIntegral
-
-toCNumBytes :: Integral a => a -> CNumBytes
-toCNumBytes = fromIntegral
 
 -- | <http://www.sqlite.org/c3ref/c_static.html>
 --
