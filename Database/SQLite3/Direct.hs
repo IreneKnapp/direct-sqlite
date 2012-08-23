@@ -150,7 +150,9 @@ open (Utf8 path) =
                 _   <- close db  -- This is harmless if db is null.
                 return $ Left (err, msg)
             Right () ->
-                return $ Right db
+                if db == Database nullPtr
+                    then fail "sqlite3_open unexpectedly returned NULL"
+                    else return $ Right db
 
 -- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())
