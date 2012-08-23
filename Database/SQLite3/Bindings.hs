@@ -98,6 +98,9 @@ foreign import ccall "wrapper"
 
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
+--
+-- If the query contains no SQL statements, this returns @SQLITE_OK@ and sets
+-- the @'Ptr' 'CStatement'@ to null.
 foreign import ccall "sqlite3_prepare_v2"
     c_sqlite3_prepare_v2
         :: Ptr CDatabase
@@ -106,7 +109,7 @@ foreign import ccall "sqlite3_prepare_v2"
                                 --   in bytes.  If this is negative, then the
                                 --   SQL statement is treated as a
                                 --   NUL-terminated string.
-        -> Ptr (Ptr CStatement) -- ^ OUT: Statement handle
+        -> Ptr (Ptr CStatement) -- ^ OUT: Statement handle.  This must not be null.
         -> Ptr CString          -- ^ OUT: Pointer to unused portion of zSql
         -> IO CError
 

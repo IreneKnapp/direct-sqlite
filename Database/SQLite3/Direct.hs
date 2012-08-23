@@ -108,6 +108,10 @@ unsafeUseAsCStringLenNoNull bs cb
     | otherwise  = BSU.unsafeUseAsCStringLen bs $ \(ptr, len) ->
                        cb ptr (fromIntegral len)
 
+wrapNullablePtr :: (Ptr a -> b) -> Ptr a -> Maybe b
+wrapNullablePtr f ptr | ptr == nullPtr = Nothing
+                      | otherwise      = Just (f ptr)
+
 type Result a = Either Error a
 
 -- Convert a 'CError' to a 'Result', in the common case where
@@ -164,12 +168,15 @@ exec (Database db) (Utf8 sql) =
             Right () -> return $ Right ()
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
-prepare :: Database -> Utf8 -> IO (Either Error Statement)
+--
+-- If the query contains no SQL statements, this returns
+-- @'Right' 'Nothing'@.
+prepare :: Database -> Utf8 -> IO (Either Error (Maybe Statement))
 prepare (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
         alloca $ \statement ->
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
-                toResultM (Statement <$> peek statement)
+                toResultM (wrapNullablePtr Statement <$> peek statement)
 
 -- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO (Either Error StepResult)

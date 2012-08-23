@@ -187,10 +187,15 @@ exec db sql =
 --
 -- Unlike 'exec', 'prepare' only executes the first statement, and ignores
 -- subsequent statements.
+--
+-- If the query string contains no SQL statements, this 'fail's.
 prepare :: Database -> String -> IO Statement
-prepare db sql =
-    Direct.prepare db (toUtf8 sql) >>=
-        checkError (DetailDatabase db) ("prepare " ++ show sql)
+prepare db sql = do
+    m <- Direct.prepare db (toUtf8 sql)
+            >>= checkError (DetailDatabase db) ("prepare " ++ show sql)
+    case m of
+        Nothing   -> fail "Direct.SQLite3.prepare: empty query string"
+        Just stmt -> return stmt
 
 -- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO StepResult
