@@ -72,21 +72,15 @@ testBind TestEnv{..} = TestCase $ do
 -- Test bindParameterCount
 testBindParamCounts :: TestEnv -> Test
 testBindParamCounts TestEnv{..} = TestCase $ do
-  nParams <- bracket (prepare conn "SELECT $a") finalize bindParameterCount
-  assertEqual "single $a" 1 nParams
-  nParams <- bracket (prepare conn "SELECT (?1+?1+?1+?2+?3)") finalize bindParameterCount
-  assertEqual "3 unique ?NNNs" 3 nParams
-  nParams <- bracket (prepare conn "SELECT (?+?+?)") finalize bindParameterCount
-  assertEqual "3 positional" 3 nParams
-  nParams <- bracket (prepare conn "SELECT ?3, ?5, ?1") finalize bindParameterCount
-  assertEqual "5 params, 2 gaps" 5 nParams
-  nParams <- bracket (prepare conn "SELECT ?3, ?5, ?1, ?") finalize bindParameterCount
-  assertEqual "6 params, 2 gaps, last param index automatic" 6 nParams
-  nParams <- bracket (prepare conn "SELECT ?, ?5, ?, ?2, ?, ?6, ?") finalize bindParameterCount
-  assertEqual "8 params, with automatic indices and overlap" 8 nParams
+  testCase "single $a"                  "SELECT $a"                     1
+  testCase "3 unique ?NNNs"             "SELECT (?1+?1+?1+?2+?3)"       3
+  testCase "3 positional"               "SELECT (?+?+?)"                3
+  testCase "5 params, 2 gaps"           "SELECT ?3, ?5, ?1"             5
+  testCase "6 params, gaps & auto"      "SELECT ?3, ?5, ?1, ?"          6
+  testCase "8 params, auto & overlap"   "SELECT ?, ?5, ?, ?2, ?, ?6, ?" 8
     -- 8 because ? grabs an index one greater than the highest index of all
     -- previous parameters, not just the most recent index.
-  testCase "0 placeholders" "SELECT 1" 0
+  testCase "0 placeholders"             "SELECT 1"                      0
   where
     testCase label query expected =
         bracket (prepare conn query) finalize bindParameterCount
