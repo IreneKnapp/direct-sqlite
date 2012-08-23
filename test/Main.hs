@@ -4,12 +4,12 @@ import Database.SQLite3
 
 import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
                                 -- as Prelude no longer exports catch.
-import Control.Exception    (IOException, bracket, try)
+import Control.Exception    (bracket, try)
 import Control.Monad        (when)
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
-import System.IO.Error      (isDoesNotExistError)
+import System.IO.Error      (isDoesNotExistError, isUserError)
 import Test.HUnit
 
 import qualified Control.Exception as E
@@ -35,10 +35,18 @@ tests =
     , TestLabel "Params" . testBindErrorValidation
     ]
 
-assertBindErrorCaught :: IO a -> Assertion
-assertBindErrorCaught action = do
-  E.catch (action >> return False) (\(_err :: IOException) -> return True) >>=
-    assertBool "assertExceptionCaught"
+assertFail :: IO a -> Assertion
+assertFail action =
+  shouldFail action >>= assertBool "assertFail"
+
+-- | Return 'True' if the IO action throws a 'userError',
+-- which happens when 'fail' is used.
+shouldFail :: IO a -> IO Bool
+shouldFail action = do
+  r <- try action
+  case r of
+    Left e  -> return $ isUserError e
+    Right _ -> return False
 
 testExec :: TestEnv -> Test
 testExec TestEnv{..} = TestCase $ do
@@ -140,8 +148,8 @@ testBindParamName TestEnv{..} = TestCase $ do
 
 testBindErrorValidation :: TestEnv -> Test
 testBindErrorValidation TestEnv{..} = TestCase $ do
-  bracket (prepare conn "SELECT ?") finalize (\stmt -> assertBindErrorCaught (testException1 stmt))
-  bracket (prepare conn "SELECT ?") finalize (\stmt -> assertBindErrorCaught (testException2 stmt))
+  bracket (prepare conn "SELECT ?") finalize (assertFail . testException1)
+  bracket (prepare conn "SELECT ?") finalize (assertFail . testException2)
   where
     -- Invalid use, one param in q string, none given
     testException1 stmt = bind stmt []
