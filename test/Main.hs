@@ -4,7 +4,7 @@ import Database.SQLite3
 
 import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
                                 -- as Prelude no longer exports catch.
-import Control.Exception    (IOException, bracket)
+import Control.Exception    (IOException, bracket, try)
 import Control.Monad        (when)
 import System.Directory
 import System.Exit          (exitFailure)
@@ -19,14 +19,16 @@ data TestEnv =
     conn :: Database
     -- ^ Database shared by all the tests
   , withConn :: forall a. (Database -> IO a) -> IO a
-    -- ^ Bracket for spawning additional connections
+    -- ^ Bracket for spawning an additional connection.
+    --   This connection will be isolated from others.
   , withConnShared :: forall a. (Database -> IO a) -> IO a
     -- ^ Like 'withConn', but every invocation shares the same database.
   }
 
 tests :: [TestEnv -> Test]
 tests =
-    [ TestLabel "Simple" . testSimplest
+    [ TestLabel "Exec"   . testExec
+    , TestLabel "Simple" . testSimplest
     , TestLabel "Params" . testBind
     , TestLabel "Params" . testBindParamCounts
     , TestLabel "Params" . testBindParamName
@@ -37,6 +39,40 @@ assertBindErrorCaught :: IO a -> Assertion
 assertBindErrorCaught action = do
   E.catch (action >> return False) (\(_err :: IOException) -> return True) >>=
     assertBool "assertExceptionCaught"
+
+testExec :: TestEnv -> Test
+testExec TestEnv{..} = TestCase $ do
+  exec conn ""
+  exec conn "     "
+  exec conn ";"
+  exec conn " ; ; ; ; ; "
+  exec conn "--"
+  Left SQLError{sqlError = ErrorError} <- try $ exec conn "/*"
+    -- sqlite3_exec does not allow "/*" to be terminated by end of input,
+    -- but <http://www.sqlite.org/lang_comment.html> says it's fine.
+  exec conn ";--\n;/**/"
+  withConn $ \conn -> do
+    -- Make sure all the statements passed to exec are executed.
+    -- Test a little value conversion while we're at it.
+    exec conn "CREATE TABLE foo (n FLOAT, t TEXT); \
+              \INSERT INTO foo VALUES (3.5, null); \
+              \INSERT INTO foo VALUES (null, 'Ự₦ⓘ₡ợ₫ḝ'); \
+              \INSERT INTO foo VALUES (null, ''); \
+              \INSERT INTO foo VALUES (null, 'null'); \
+              \INSERT INTO foo VALUES (null, null)"
+    bracket (prepare conn "SELECT * FROM foo") finalize $ \stmt -> do
+      Row <- step stmt
+      [SQLFloat 3.5, SQLNull]       <- columns stmt
+      Row <- step stmt
+      [SQLNull, SQLText "Ự₦ⓘ₡ợ₫ḝ"]  <- columns stmt
+      Row <- step stmt
+      [SQLNull, SQLText ""]         <- columns stmt
+      Row <- step stmt
+      [SQLNull, SQLText "null"]     <- columns stmt
+      Row <- step stmt
+      [SQLNull, SQLNull]            <- columns stmt
+      Done <- step stmt
+      return ()
 
 -- Simplest SELECT
 testSimplest :: TestEnv -> Test
