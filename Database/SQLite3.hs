@@ -3,7 +3,6 @@ module Database.SQLite3 (
     -- * Connection management
     open,
     close,
-    errmsg,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -146,7 +145,7 @@ renderDetailSource src = case src of
     DetailNone ->
         return Nothing
     DetailDatabase db -> do
-        details <- errmsg db
+        details <- fromUtf8 <$> Direct.errmsg db
         return $ Just details
     DetailMessage utf8 ->
         return $ Just $ fromUtf8 utf8
@@ -173,10 +172,6 @@ open path =
 close :: Database -> IO ()
 close db =
     Direct.close db >>= checkError (DetailDatabase db) "close"
-
--- | <http://www.sqlite.org/c3ref/errcode.html>
-errmsg :: Database -> IO String
-errmsg db = fromUtf8 <$> Direct.errmsg db
 
 -- | Execute zero or more SQL statements delimited by semicolons.
 exec :: Database -> String -> IO ()
