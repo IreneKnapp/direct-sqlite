@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:

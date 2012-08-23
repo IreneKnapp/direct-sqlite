@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 module Database.SQLite3 (
     -- * Connection management
     open,
@@ -167,7 +165,7 @@ checkError ds fn = either (throwSQLError ds fn) return
 
 -- | <http://www.sqlite.org/c3ref/open.html>
 open :: String -> IO Database
-open path = do
+open path =
     Direct.open (toUtf8 path)
         >>= checkError DetailNone ("open " ++ show path)
 
@@ -197,7 +195,7 @@ exec db sql =
 prepare :: Database -> String -> IO Statement
 prepare db sql =
     Direct.prepare db (toUtf8 sql) >>=
-        checkError (DetailDatabase db) ("prepare " ++ (show sql))
+        checkError (DetailDatabase db) ("prepare " ++ show sql)
 
 -- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO StepResult
