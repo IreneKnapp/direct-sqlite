@@ -4,15 +4,13 @@ import Database.SQLite3
 
 import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
                                 -- as Prelude no longer exports catch.
-import Control.Exception    (bracket, try)
+import Control.Exception    (bracket, handleJust, try)
 import Control.Monad        (when)
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
 import System.IO.Error      (isDoesNotExistError, isUserError)
 import Test.HUnit
-
-import qualified Control.Exception as E
 
 data TestEnv =
   TestEnv {
@@ -27,12 +25,14 @@ data TestEnv =
 
 tests :: [TestEnv -> Test]
 tests =
-    [ TestLabel "Exec"   . testExec
-    , TestLabel "Simple" . testSimplest
-    , TestLabel "Params" . testBind
-    , TestLabel "Params" . testBindParamCounts
-    , TestLabel "Params" . testBindParamName
-    , TestLabel "Params" . testBindErrorValidation
+    [ TestLabel "Exec"          . testExec
+    , TestLabel "Simple"        . testSimplest
+    , TestLabel "Prepare"       . testPrepare
+    , TestLabel "CloseBusy"     . testCloseBusy
+    , TestLabel "Params"        . testBind
+    , TestLabel "Params"        . testBindParamCounts
+    , TestLabel "Params"        . testBindParamName
+    , TestLabel "Params"        . testBindErrorValidation
     ]
 
 assertFail :: IO a -> Assertion
@@ -47,6 +47,9 @@ shouldFail action = do
   case r of
     Left e  -> return $ isUserError e
     Right _ -> return False
+
+withStmt :: Database -> String -> (Statement -> IO a) -> IO a
+withStmt conn sql = bracket (prepare conn sql) finalize
 
 testExec :: TestEnv -> Test
 testExec TestEnv{..} = TestCase $ do
@@ -68,7 +71,7 @@ testExec TestEnv{..} = TestCase $ do
               \INSERT INTO foo VALUES (null, ''); \
               \INSERT INTO foo VALUES (null, 'null'); \
               \INSERT INTO foo VALUES (null, null)"
-    bracket (prepare conn "SELECT * FROM foo") finalize $ \stmt -> do
+    withStmt conn ("SELECT * FROM foo") $ \stmt -> do
       Row <- step stmt
       [SQLFloat 3.5, SQLNull]       <- columns stmt
       Row <- step stmt
@@ -91,6 +94,34 @@ testSimplest TestEnv{..} = TestCase $ do
   Done <- step stmt
   finalize stmt
   assertEqual "1+1" (SQLInteger 2) res
+
+testPrepare :: TestEnv -> Test
+testPrepare TestEnv{..} = TestCase $ do
+  True <- shouldFail $ prepare conn ""
+  True <- shouldFail $ prepare conn ";"
+  withConn $ \conn -> do
+    withStmt conn
+             "CREATE TABLE foo (a INT, b INT); \
+             \INSERT INTO foo VALUES (1, 2); \
+             \INSERT INTO foo VALUES (3, 4)"
+             $ \stmt -> do
+      Done <- step stmt
+      return ()
+    withStmt conn
+             "SELECT * FROM foo"
+             $ \stmt -> do
+      Done <- step stmt -- No row was inserted, because only the CREATE TABLE
+                        -- statement was run.  The rest was ignored.
+      return ()
+  return ()
+
+testCloseBusy :: TestEnv -> Test
+testCloseBusy _ = TestCase $ do
+  conn <- open ":memory:"
+  stmt <- prepare conn "SELECT 1"
+  Left SQLError{sqlError = ErrorBusy} <- try $ close conn
+  finalize stmt
+  close conn
 
 testBind :: TestEnv -> Test
 testBind TestEnv{..} = TestCase $ do
@@ -176,11 +207,11 @@ main = do
   mapM_ (`hSetBuffering` LineBuffering) [stdout, stderr]
 
   putStrLn $ "Creating " ++ sharedDBPath
-  E.handleJust (\e -> if isDoesNotExistError e
-                         then Just ()
-                         else Nothing)
-               (\_ -> return ())
-               (removeFile sharedDBPath)
+  handleJust (\e -> if isDoesNotExistError e
+                       then Just ()
+                       else Nothing)
+             (\_ -> return ())
+             (removeFile sharedDBPath)
   open sharedDBPath >>= close
 
   Counts{cases, tried, errors, failures} <-
