@@ -1,7 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# OPTIONS -fno-warn-name-shadowing #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
 --
@@ -33,8 +30,6 @@ module Database.SQLite3.Direct (
 
     -- * Binding values to a prepared statement
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
-    bind,
-    binds,
     bindInt64,
     bindDouble,
     bindText,
@@ -43,8 +38,6 @@ module Database.SQLite3.Direct (
 
     -- * Reading the result row
     -- | <http://www.sqlite.org/c3ref/column_blob.html>
-    column,
-    columns,
     columnType,
     columnInt64,
     columnDouble,
@@ -54,7 +47,6 @@ module Database.SQLite3.Direct (
     -- * Types
     Database(..),
     Statement(..),
-    SQLData(..),
     ColumnType(..),
 
     -- ** Results and errors
@@ -77,28 +69,19 @@ import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
 import Data.ByteString      (ByteString)
 import Data.String          (IsString(..))
-import Data.Typeable
 import Foreign
 import Foreign.C
 
 newtype Database = Database (Ptr CDatabase)
-    deriving Show
+    deriving (Eq, Show)
 
 newtype Statement = Statement (Ptr CStatement)
-    deriving Show
+    deriving (Eq, Show)
 
 data StepResult
     = Row
     | Done
     deriving (Eq, Show)
-
-data SQLData
-    = SQLInteger    !Int64
-    | SQLFloat      !Double
-    | SQLText       !Utf8
-    | SQLBlob       !ByteString
-    | SQLNull
-    deriving (Eq, Show, Typeable)
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
@@ -123,6 +106,10 @@ unsafeUseAsCStringLenNoNull bs cb
     | BS.null bs = cb (intPtrToPtr 1) 0
     | otherwise  = BSU.unsafeUseAsCStringLen bs $ \(ptr, len) ->
                        cb ptr (fromIntegral len)
+
+wrapNullablePtr :: (Ptr a -> b) -> Ptr a -> Maybe b
+wrapNullablePtr f ptr | ptr == nullPtr = Nothing
+                      | otherwise      = Just (f ptr)
 
 type Result a = Either Error a
 
@@ -149,12 +136,23 @@ toStepResult code =
 ------------------------------------------------------------------------
 
 -- | <http://www.sqlite.org/c3ref/open.html>
-open :: Utf8 -> IO (Either Error Database)
+open :: Utf8 -> IO (Either (Error, Utf8) Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
-        alloca $ \database ->
-            c_sqlite3_open path' database >>=
-                toResultM (Database <$> peek database)
+    alloca $ \database -> do
+        rc <- c_sqlite3_open path' database
+        db <- Database <$> peek database
+            -- sqlite3_open returns a sqlite3 even on failure.
+            -- That's where we get a more descriptive error message.
+        case toResult () rc of
+            Left err -> do
+                msg <- errmsg db -- This returns "out of memory" if db is null.
+                _   <- close db  -- This is harmless if db is null.
+                return $ Left (err, msg)
+            Right () ->
+                if db == Database nullPtr
+                    then fail "sqlite3_open unexpectedly returned NULL"
+                    else return $ Right db
 
 -- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())
@@ -166,15 +164,14 @@ errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
 
--- | Execute one or more SQL statements delimited by semicolons.
 exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
 exec (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
-    alloca $ \errmsg -> do
-        rc <- c_sqlite3_exec db sql' nullFunPtr nullPtr errmsg
+    alloca $ \msgPtrOut -> do
+        rc <- c_sqlite3_exec db sql' nullFunPtr nullPtr msgPtrOut
         case toResult () rc of
             Left err -> do
-                msgPtr <- peek errmsg
+                msgPtr <- peek msgPtrOut
                 msg <- packUtf8 (Utf8 BS.empty) id msgPtr
                 c_sqlite3_free msgPtr
                 return $ Left (err, msg)
@@ -182,14 +179,14 @@ exec (Database db) (Utf8 sql) =
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
--- Unlike 'exec', 'prepare' only executes the first statement, and ignores
--- subsequent statements.
-prepare :: Database -> Utf8 -> IO (Either Error Statement)
+-- If the query contains no SQL statements, this returns
+-- @'Right' 'Nothing'@.
+prepare :: Database -> Utf8 -> IO (Either Error (Maybe Statement))
 prepare (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
         alloca $ \statement ->
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
-                toResultM (Statement <$> peek statement)
+                toResultM (wrapNullablePtr Statement <$> peek statement)
 
 -- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO (Either Error StepResult)
@@ -294,54 +291,3 @@ columnBlob (Statement stmt) idx = do
     ptr <- c_sqlite3_column_blob stmt idx
     len <- c_sqlite3_column_bytes stmt idx
     packCStringLen ptr len
-
--- | If the index is not between 1 and 'bindParameterCount' inclusive, this
--- returns @'Left' 'ErrorRange'@.  Otherwise, it succeeds, even if the query
--- skips this index by using numbered parameters.
---
--- Example:
---
--- >> Right stmt <- prepare conn "SELECT ?1, ?3, ?5"
--- >> bind stmt 1 (SQLInteger 1)
--- >Right ()
--- >> bind stmt 2 (SQLInteger 2)
--- >Right ()
--- >> bind stmt 6 (SQLInteger 6)
--- >Left ErrorRange
--- >> step stmt >> columns stmt
--- >[SQLInteger 1,SQLNull,SQLNull]
-bind :: Statement -> ParamIndex -> SQLData -> IO (Either Error ())
-bind statement idx datum =
-    case datum of
-        SQLInteger v -> bindInt64  statement idx v
-        SQLFloat   v -> bindDouble statement idx v
-        SQLText    v -> bindText   statement idx v
-        SQLBlob    v -> bindBlob   statement idx v
-        SQLNull      -> bindNull   statement idx
-
-column :: Statement -> ColumnIndex -> IO SQLData
-column statement idx = do
-    theType <- columnType statement idx
-    case theType of
-        IntegerColumn -> SQLInteger <$> columnInt64  statement idx
-        FloatColumn   -> SQLFloat   <$> columnDouble statement idx
-        TextColumn    -> SQLText    <$> columnText   statement idx
-        BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
-        NullColumn    -> return SQLNull
-
--- | If an error occurs, 'binds' stops and returns that error.
-binds :: Statement -> [SQLData] -> IO (Either Error ())
-binds statement sqlData =
-    loop $ zip [1..] sqlData
-  where
-    loop []                  = return $ Right ()
-    loop ((idx, datum) : xs) = do
-        result <- bind statement idx datum
-        case result of
-            Left err -> return $ Left err
-            Right _  -> loop xs
-
-columns :: Statement -> IO [SQLData]
-columns statement = do
-    count <- columnCount statement
-    mapM (column statement) [0..count-1]

@@ -27,16 +27,6 @@ module Database.SQLite3.Bindings.Types (
     CNumBytes(..),
     CDestructor,
     c_SQLITE_TRANSIENT,
-
-    -- * Conversion helpers
-    fromParamIndex,
-    fromColumnIndex,
-    fromColumnCount,
-    fromCNumBytes,
-    toParamIndex,
-    toColumnIndex,
-    toColumnCount,
-    toCNumBytes,
 ) where
 
 #include "sqlite3.h"
@@ -97,7 +87,7 @@ data CStatement
 -- | Index of a parameter in a parameterized query.
 -- Parameter indices start from 1.
 --
--- When a query is 'Database.SQLite3.Direct.prepare'd, SQLite allocates an
+-- When a query is 'Database.SQLite3.prepare'd, SQLite allocates an
 -- array indexed from 1 to the highest parameter index.  For example:
 --
 -- >>Right stmt <- prepare conn "SELECT ?1, ?5, ?3, ?"
@@ -106,47 +96,31 @@ data CStatement
 --
 -- This will allocate an array indexed from 1 to 6 (@?@ takes the highest
 -- preceding index plus one).  The array is initialized with null values.
--- When you 'Database.SQLite3.Direct.bind' a parameter, it assigns a new value
--- to one of these indices.
+-- When you bind a parameter with 'Database.SQLite3.bindSQLData', it assigns a
+-- new value to one of these indices.
 --
 -- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
 -- parameter placeholders, and how parameter indices are assigned.
 newtype ParamIndex = ParamIndex CInt
-    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show ParamIndex where
+    show (ParamIndex n) = show n
 
 -- | Index of a column in a result set.  Column indices start from 0.
 newtype ColumnIndex = ColumnIndex CInt
-    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show ColumnIndex where
+    show (ColumnIndex n) = show n
 
 -- | Number of columns in a result set.
 type ColumnCount = ColumnIndex
 
 newtype CNumBytes = CNumBytes CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
-
-fromParamIndex :: Num a => ParamIndex -> a
-fromParamIndex = fromIntegral
-
-fromColumnIndex :: Num a => ColumnIndex -> a
-fromColumnIndex = fromIntegral
-
-fromColumnCount :: Num a => ColumnCount -> a
-fromColumnCount = fromIntegral
-
-fromCNumBytes :: Num a => CNumBytes -> a
-fromCNumBytes = fromIntegral
-
-toParamIndex :: Integral a => a -> ParamIndex
-toParamIndex = fromIntegral
-
-toColumnIndex :: Integral a => a -> ColumnIndex
-toColumnIndex = fromIntegral
-
-toColumnCount :: Integral a => a -> ColumnCount
-toColumnCount = fromIntegral
-
-toCNumBytes :: Integral a => a -> CNumBytes
-toCNumBytes = fromIntegral
 
 -- | <http://www.sqlite.org/c3ref/c_static.html>
 --
