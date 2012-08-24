@@ -33,6 +33,7 @@ tests =
     , TestLabel "Params"        . testBindParamCounts
     , TestLabel "Params"        . testBindParamName
     , TestLabel "Params"        . testBindErrorValidation
+    , TestLabel "Columns"       . testColumns
     , TestLabel "Errors"        . testErrors
     ]
 
@@ -195,6 +196,61 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
     testException1 stmt = bind stmt []
     -- Invalid use, one param in q string, 2 given
     testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
+
+testColumns :: TestEnv -> Test
+testColumns TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    withStmt conn "CREATE TABLE foo (a INT)" command
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      1 <- columnCount stmt
+      exec conn "ALTER TABLE foo ADD COLUMN b INT"
+      Done <- step stmt
+      2 <- columnCount stmt
+      return ()
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      2 <- columnCount stmt
+      Done <- step stmt
+      2 <- columnCount stmt
+      return ()
+    withStmt conn "INSERT INTO foo VALUES (1, 2)" command
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      2 <- columnCount stmt
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 1, SQLInteger 2] <- columns stmt
+      Done <- step stmt
+      2 <- columnCount stmt
+      return ()
+    withStmt conn "INSERT INTO foo VALUES (3, 4), (5, 6)" command
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      2 <- columnCount stmt
+      exec conn "ALTER TABLE foo ADD COLUMN c INT"
+      Row <- step stmt
+      3 <- columnCount stmt
+      [SQLInteger 1, SQLInteger 2, SQLNull] <- columns stmt
+      exec conn "ALTER TABLE foo ADD COLUMN d INT NOT NULL DEFAULT 42"
+        -- ignored by this prepared statement, now that it has stepped.
+      Row <- step stmt
+      3 <- columnCount stmt
+      [SQLInteger 3, SQLInteger 4, SQLNull] <- columns stmt
+      Row <- step stmt
+      3 <- columnCount stmt
+      [SQLInteger 5, SQLInteger 6, SQLNull] <- columns stmt
+      Done <- step stmt
+      3 <- columnCount stmt
+      reset stmt
+      3 <- columnCount stmt -- The prepared statement *still* doesn't know
+                            -- about the new column.
+      Row <- step stmt
+      4 <- columnCount stmt -- That's better.
+      [SQLInteger 1, SQLInteger 2, SQLNull, SQLInteger 42] <- columns stmt
+      return ()
+  where
+    command stmt = do
+      0 <- columnCount stmt
+      Done <- step stmt
+      0 <- columnCount stmt
+      return ()
 
 -- Testing for specific error codes:
 --
