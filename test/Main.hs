@@ -5,7 +5,7 @@ import Database.SQLite3
 import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
                                 -- as Prelude no longer exports catch.
 import Control.Exception    (bracket, handleJust, try)
-import Control.Monad        (when)
+import Control.Monad        (forM_, when)
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
@@ -218,9 +218,9 @@ testErrors TestEnv{..} = TestCase $ do
       exec conn "INSERT INTO bar VALUES (null)"
 
     withStmt conn "SELECT ?" $ \stmt -> do
-      expectError ErrorRange $ bindSQLData stmt (-1) $ SQLInteger 42
-      expectError ErrorRange $ bindSQLData stmt 0    $ SQLInteger 42
-      expectError ErrorRange $ bindSQLData stmt 2    $ SQLInteger 42
+      forM_ [-1, 0, 2] $ \i -> do
+        expectError ErrorRange $ bindSQLData stmt i $ SQLInteger 42
+        expectError ErrorRange $ bindSQLData stmt i SQLNull
       bindSQLData stmt 1 $ SQLInteger 42
       Row <- step stmt
 
@@ -230,6 +230,26 @@ testErrors TestEnv{..} = TestCase $ do
       SQLNull <- column stmt 1
 
       SQLInteger 42 <- column stmt 0
+      return ()
+
+    withStmt conn "SELECT 1" $ \stmt -> do
+      forM_ [-1, 0, 1, 2] $ \i -> do
+        expectError ErrorRange $ bindSQLData stmt i $ SQLInteger 42
+        expectError ErrorRange $ bindSQLData stmt i SQLNull
+      bind stmt []  -- This should succeed.  Don't whine that there aren't any
+                    -- parameters to bind!
+      Row <- step stmt
+      SQLInteger 1 <- column stmt 0
+      return ()
+
+    withStmt conn "SELECT ?5" $ \stmt -> do
+      forM_ [-1, 0, 6, 7] $ \i -> do
+        expectError ErrorRange $ bindSQLData stmt i $ SQLInteger 42
+        expectError ErrorRange $ bindSQLData stmt i SQLNull
+      bind stmt $ map SQLInteger [1..5]
+        -- This succeeds, even though 1..4 aren't used.
+      Row <- step stmt
+      [SQLInteger 5] <- columns stmt
       return ()
 
   where
