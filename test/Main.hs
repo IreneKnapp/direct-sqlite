@@ -33,6 +33,7 @@ tests =
     , TestLabel "Params"        . testBindParamCounts
     , TestLabel "Params"        . testBindParamName
     , TestLabel "Params"        . testBindErrorValidation
+    , TestLabel "Errors"        . testErrors
     ]
 
 assertFail :: IO a -> Assertion
@@ -108,11 +109,19 @@ testPrepare TestEnv{..} = TestCase $ do
       Done <- step stmt
       return ()
     withStmt conn
+             "BEGIN; INSERT INTO foo VALUES (5, 6); COMMIT"
+             $ \stmt -> do
+      Done <- step stmt
+      return ()
+    withStmt conn
              "SELECT * FROM foo"
              $ \stmt -> do
       Done <- step stmt -- No row was inserted, because only the CREATE TABLE
                         -- statement was run.  The rest was ignored.
       return ()
+    Left SQLError{sqlError = ErrorError} <- try $ exec conn "BEGIN"
+      -- We're in a transaction already, so this fails.
+    exec conn "COMMIT"
   return ()
 
 testCloseBusy :: TestEnv -> Test
@@ -186,6 +195,48 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
     testException1 stmt = bind stmt []
     -- Invalid use, one param in q string, 2 given
     testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
+
+-- Testing for specific error codes:
+--
+--  * ErrorConstraint
+--
+--  * ErrorRange
+testErrors :: TestEnv -> Test
+testErrors TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE foo (n INT UNIQUE)"
+    exec conn "INSERT INTO foo VALUES (3)"
+    expectError ErrorConstraint $
+      exec conn "INSERT INTO foo VALUES (3)"
+
+    -- Multiple NULLs are allowed when there's a UNIQUE constraint
+    exec conn "INSERT INTO foo VALUES (null)"
+    exec conn "INSERT INTO foo VALUES (null)"
+
+    exec conn "CREATE TABLE bar (n INT NOT NULL)"
+    expectError ErrorConstraint $
+      exec conn "INSERT INTO bar VALUES (null)"
+
+    withStmt conn "SELECT ?" $ \stmt -> do
+      expectError ErrorRange $ bindSQLData stmt (-1) $ SQLInteger 42
+      expectError ErrorRange $ bindSQLData stmt 0    $ SQLInteger 42
+      expectError ErrorRange $ bindSQLData stmt 2    $ SQLInteger 42
+      bindSQLData stmt 1 $ SQLInteger 42
+      Row <- step stmt
+
+      -- If column index is out of range, it returns SQLNull.
+      -- This may or may not be the desired behavior, but at least we know.
+      SQLNull <- column stmt (-1)
+      SQLNull <- column stmt 1
+
+      SQLInteger 42 <- column stmt 0
+      return ()
+
+  where
+    expectError err io = do
+      Left SQLError{sqlError = err'} <- try io
+      assertBool "testErrors: expectError" (err == err')
+
 
 sharedDBPath :: String
 sharedDBPath = "dist/test/direct-sqlite-test-database.db"
