@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Database.SQLite3 (
     -- * Connection management
     open,
@@ -84,21 +85,21 @@ import Database.SQLite3.Direct
 import qualified Database.SQLite3.Direct as Direct
 
 import Prelude hiding (error)
-import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
 import Control.Exception    (Exception, throwIO)
 import Control.Monad        (when, zipWithM_)
+import Data.ByteString      (ByteString)
 import Data.Int             (Int64)
-import Data.String          (fromString)
+import Data.Text            (Text)
 import Data.Typeable
 
 data SQLData
     = SQLInteger    !Int64
     | SQLFloat      !Double
-    | SQLText       !T.Text
-    | SQLBlob       !BS.ByteString
+    | SQLText       !Text
+    | SQLBlob       !ByteString
     | SQLNull
     deriving (Eq, Show, Typeable)
 
@@ -108,39 +109,48 @@ data SQLData
 data SQLError = SQLError
     { sqlError          :: !Error
         -- ^ Error code returned by API call
-    , sqlErrorDetails   :: Maybe String
+    , sqlErrorDetails   :: (Maybe Text)
         -- ^ Text describing the error, if available
-    , sqlErrorContext   :: String
+    , sqlErrorContext   :: Text
         -- ^ Indicates what action produced this error,
         --   e.g. @exec \"SELECT * FROM foo\"@
     }
     deriving Typeable
+
+-- NB: SQLError is lazy in 'sqlErrorDetails' and 'sqlErrorContext',
+-- to defer message construction in the case where a user catches and
+-- immediately handles the error.
+
 
 instance Show SQLError where
     show SQLError{ sqlError        = code
                  , sqlErrorDetails = details
                  , sqlErrorContext = context
                  }
-         = "SQLite3 returned " ++ show code
-        ++ " while attempting to perform " ++ context
-        ++ case details of
+         = T.unpack $ T.concat
+         [ "SQLite3 returned "
+         , T.pack $ show code
+         , " while attempting to perform "
+         , context
+         , case details of
                Nothing -> "."
-               Just s  -> ": " ++ s
+               Just s  -> ": " `T.append` s
+         ]
 
 instance Exception SQLError
 
-fromUtf8 :: Utf8 -> String
-fromUtf8 (Utf8 bs) = (T.unpack . T.decodeUtf8) bs
+fromUtf8 :: Utf8 -> Text
+fromUtf8 (Utf8 bs) = T.decodeUtf8 bs
 
-toUtf8 :: String -> Utf8
-toUtf8 = fromString
+toUtf8 :: Text -> Utf8
+toUtf8 = Utf8 . T.encodeUtf8
 
 data DetailSource
     = DetailNone
     | DetailDatabase Database
     | DetailMessage  Utf8
 
-renderDetailSource :: DetailSource -> IO (Maybe String)
+renderDetailSource :: DetailSource -> IO (Maybe Text)
 renderDetailSource src = case src of
     DetailNone ->
         return Nothing
@@ -150,7 +160,7 @@ renderDetailSource src = case src of
     DetailMessage utf8 ->
         return $ Just $ fromUtf8 utf8
 
-throwSQLError :: DetailSource -> String -> Error -> IO a
+throwSQLError :: DetailSource -> Text -> Error -> IO a
 throwSQLError detailSource context error = do
     details <- renderDetailSource detailSource
     throwIO SQLError
@@ -159,19 +169,23 @@ throwSQLError detailSource context error = do
         , sqlErrorContext = context
         }
 
-checkError :: DetailSource -> String -> Either Error a -> IO a
+checkError :: DetailSource -> Text -> Either Error a -> IO a
 checkError ds fn = either (throwSQLError ds fn) return
 
-checkErrorMsg :: String -> Either (Error, Utf8) a -> IO a
+checkErrorMsg :: Text -> Either (Error, Utf8) a -> IO a
 checkErrorMsg fn result = case result of
     Left (err, msg) -> throwSQLError (DetailMessage msg) fn err
     Right a         -> return a
 
+appendShow :: Show a => Text -> a -> Text
+appendShow txt a = txt `T.append` (T.pack . show) a
+
+
 -- | <http://www.sqlite.org/c3ref/open.html>
-open :: String -> IO Database
+open :: Text -> IO Database
 open path =
     Direct.open (toUtf8 path)
-        >>= checkErrorMsg ("open " ++ show path)
+        >>= checkErrorMsg ("open " `appendShow` path)
 
 -- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO ()
@@ -179,10 +193,10 @@ close db =
     Direct.close db >>= checkError (DetailDatabase db) "close"
 
 -- | Execute zero or more SQL statements delimited by semicolons.
-exec :: Database -> String -> IO ()
+exec :: Database -> Text -> IO ()
 exec db sql =
     Direct.exec db (toUtf8 sql)
-        >>= checkErrorMsg ("exec " ++ show sql)
+        >>= checkErrorMsg ("exec " `appendShow` sql)
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
@@ -190,10 +204,10 @@ exec db sql =
 -- subsequent statements.
 --
 -- If the query string contains no SQL statements, this 'fail's.
-prepare :: Database -> String -> IO Statement
+prepare :: Database -> Text -> IO Statement
 prepare db sql = do
     m <- Direct.prepare db (toUtf8 sql)
-            >>= checkError (DetailDatabase db) ("prepare " ++ show sql)
+            >>= checkError (DetailDatabase db) ("prepare " `appendShow` sql)
     case m of
         Nothing   -> fail "Direct.SQLite3.prepare: empty query string"
         Just stmt -> return stmt
@@ -251,12 +265,12 @@ finalize statement = do
 -- @Nothing@.
 --
 -- Note that the parameter index starts at 1, not 0.
-bindParameterName :: Statement -> ParamIndex -> IO (Maybe String)
+bindParameterName :: Statement -> ParamIndex -> IO (Maybe Text)
 bindParameterName stmt idx =
     fmap fromUtf8 <$>
     Direct.bindParameterName stmt idx
 
-bindBlob :: Statement -> ParamIndex -> BS.ByteString -> IO ()
+bindBlob :: Statement -> ParamIndex -> ByteString -> IO ()
 bindBlob statement parameterIndex byteString =
     Direct.bindBlob statement parameterIndex byteString
         >>= checkError DetailNone "bind blob"
@@ -283,7 +297,7 @@ bindNull statement parameterIndex =
     Direct.bindNull statement parameterIndex
         >>= checkError DetailNone "bind null"
 
-bindText :: Statement -> ParamIndex -> T.Text -> IO ()
+bindText :: Statement -> ParamIndex -> Text -> IO ()
 bindText statement parameterIndex text =
     Direct.bindText statement parameterIndex (Utf8 $ T.encodeUtf8 text)
         >>= checkError DetailNone "bind text"
@@ -320,7 +334,7 @@ bind statement sqlData = do
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
     zipWithM_ (bindSQLData statement) [1..] sqlData
 
-columnText :: Statement -> ColumnIndex -> IO T.Text
+columnText :: Statement -> ColumnIndex -> IO Text
 columnText statement columnIndex = do
     Utf8 bs <- Direct.columnText statement columnIndex
     return $! T.decodeUtf8 bs

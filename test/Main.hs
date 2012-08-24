@@ -9,6 +9,7 @@ import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
                                 -- as Prelude no longer exports catch.
 import Control.Exception    (bracket, handleJust, try)
 import Control.Monad        (forM_, when)
+import Data.Text            (Text)
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
@@ -17,7 +18,8 @@ import Test.HUnit
 
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Char8  as B8
-import qualified Data.Text              as Text
+import qualified Data.Text              as T
+import qualified Data.Text.IO           as T
 
 data TestEnv =
   TestEnv {
@@ -58,7 +60,7 @@ shouldFail action = do
     Left e  -> return $ isUserError e
     Right _ -> return False
 
-withStmt :: Database -> String -> (Statement -> IO a) -> IO a
+withStmt :: Database -> Text -> (Statement -> IO a) -> IO a
 withStmt conn sql = bracket (prepare conn sql) finalize
 
 testExec :: TestEnv -> Test
@@ -400,7 +402,7 @@ testIntegrity TestEnv{..} = TestCase $ do
 
               return $ f values values'
 
-        True <- test [SQLInteger 0, SQLFloat 0.0, SQLText Text.empty, SQLBlob B.empty, SQLNull]
+        True <- test [SQLInteger 0, SQLFloat 0.0, SQLText T.empty, SQLBlob B.empty, SQLNull]
         True <- test [SQLInteger minBound, SQLFloat (-1/0), SQLText "\0", SQLBlob (B8.pack "\0"), SQLNull]
         True <- test [SQLInteger maxBound, SQLFloat (1/0), SQLText "\1114111", SQLBlob ("\255"), SQLNull]
 
@@ -411,7 +413,7 @@ testIntegrity TestEnv{..} = TestCase $ do
         return ()
 
 
-sharedDBPath :: String
+sharedDBPath :: Text
 sharedDBPath = "dist/test/direct-sqlite-test-database.db"
 
 withTestEnv :: (TestEnv -> IO a) -> IO a
@@ -430,12 +432,12 @@ main :: IO ()
 main = do
   mapM_ (`hSetBuffering` LineBuffering) [stdout, stderr]
 
-  putStrLn $ "Creating " ++ sharedDBPath
+  T.putStrLn $ "Creating " `T.append` sharedDBPath
   handleJust (\e -> if isDoesNotExistError e
                        then Just ()
                        else Nothing)
              (\_ -> return ())
-             (removeFile sharedDBPath)
+             (removeFile $ T.unpack sharedDBPath)
   open sharedDBPath >>= close
 
   Counts{cases, tried, errors, failures} <-
