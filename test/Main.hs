@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import Database.SQLite3
+import qualified Database.SQLite3.Direct as Direct
 
 import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
                                 -- as Prelude no longer exports catch.
@@ -257,6 +258,10 @@ testColumns TestEnv{..} = TestCase $ do
 --  * ErrorConstraint
 --
 --  * ErrorRange
+--
+--  * ErrorLocked
+
+--  * ErrorBusy
 testErrors :: TestEnv -> Test
 testErrors TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
@@ -308,10 +313,62 @@ testErrors TestEnv{..} = TestCase $ do
       [SQLInteger 5] <- columns stmt
       return ()
 
+  -- Need to access the database with multiple connections.
+  -- "BEGIN; ROLLBACK" causes running statements in the same connection to
+  -- throw SQLITE_ABORT.
+  withConnShared $ \conn -> do
+    exec conn "CREATE TABLE foo (a INT, b INT); \
+              \INSERT INTO foo VALUES (1, 2), (3, 4), (5, 6)"
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      -- "DROP TABLE foo" should succeed, since the statement
+      -- isn't running yet.
+      exec conn "DROP TABLE foo"
+      exec conn "CREATE TABLE foo (a INT, b INT); \
+                \INSERT INTO foo VALUES (1, 2), (3, 4), (5, 6)"
+
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 1, SQLInteger 2] <- columns stmt
+
+      -- "DROP TABLE foo" should fail, now that the statement is running.
+      expectError ErrorLocked $ exec conn "DROP TABLE foo"
+      withConnShared $ \conn -> do
+        expectError ErrorBusy $ exec conn "DROP TABLE foo"
+
+        -- Apparently, we can pretend to drop the table, but we get ErrorBusy
+        -- if we try to actually COMMIT it.
+        exec conn "BEGIN; DROP TABLE foo"
+        expectError ErrorBusy $ exec conn "COMMIT"
+
+        exec conn "ROLLBACK"
+
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 3, SQLInteger 4] <- columns stmt
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 5, SQLInteger 6] <- columns stmt
+
+      expectError ErrorLocked $ exec conn "DROP TABLE foo"
+      withConnShared $ \conn ->
+        expectError ErrorBusy $ exec conn "DROP TABLE foo"
+
+      Done <- step stmt
+      2 <- columnCount stmt
+      exec conn "DROP TABLE foo"
+
+      -- Regular 'reset' throws away the error.  Make sure sqlite3_reset did
+      -- not return an error because foo is now gone.  sqlite3_reset should
+      -- only return an error if the most recent 'step' failed.
+      Right () <- Direct.reset stmt
+
+      -- But trying to 'step' again should fail.
+      expectError ErrorError $ step stmt
+
   where
     expectError err io = do
       Left SQLError{sqlError = err'} <- try io
-      assertBool "testErrors: expectError" (err == err')
+      assertEqual ("testErrors: expectError") err err'
 
 
 sharedDBPath :: String
