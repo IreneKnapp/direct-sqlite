@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
+import StrictEq
+
 import Database.SQLite3
 import qualified Database.SQLite3.Direct as Direct
 
@@ -12,6 +14,10 @@ import System.Exit          (exitFailure)
 import System.IO
 import System.IO.Error      (isDoesNotExistError, isUserError)
 import Test.HUnit
+
+import qualified Data.ByteString        as B
+import qualified Data.ByteString.Char8  as B8
+import qualified Data.Text              as Text
 
 data TestEnv =
   TestEnv {
@@ -36,6 +42,7 @@ tests =
     , TestLabel "Params"        . testBindErrorValidation
     , TestLabel "Columns"       . testColumns
     , TestLabel "Errors"        . testErrors
+    , TestLabel "Integrity"     . testIntegrity
     ]
 
 assertFail :: IO a -> Assertion
@@ -369,6 +376,39 @@ testErrors TestEnv{..} = TestCase $ do
     expectError err io = do
       Left SQLError{sqlError = err'} <- try io
       assertEqual ("testErrors: expectError") err err'
+
+-- Make sure data stored in a table comes back as-is.
+testIntegrity :: TestEnv -> Test
+testIntegrity TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE foo (i INT, f FLOAT, t TEXT, b BLOB, n TEXT)"
+    withStmt conn "INSERT INTO foo VALUES (?, ?, ?, ?, ?)" $ \insert ->
+      withStmt conn "SELECT * FROM foo" $ \select -> do
+        let test = testWith (===)
+
+            testWith f values = do
+              exec conn "DELETE FROM foo"
+
+              reset insert
+              bind insert values
+              Done <- step insert
+
+              reset select
+              Row <- step select
+              values' <- columns select
+              Done <- step select
+
+              return $ f values values'
+
+        True <- test [SQLInteger 0, SQLFloat 0.0, SQLText Text.empty, SQLBlob B.empty, SQLNull]
+        True <- test [SQLInteger minBound, SQLFloat (-1/0), SQLText "\0", SQLBlob (B8.pack "\0"), SQLNull]
+        True <- test [SQLInteger maxBound, SQLFloat (1/0), SQLText "\1114111", SQLBlob ("\255"), SQLNull]
+
+        -- SQLite3 turns NaN into SQLNull.
+        True <- testWith (\_old new -> new === [SQLNull, SQLNull, SQLNull, SQLNull, SQLNull])
+                [SQLNull, SQLFloat (0/0), SQLNull, SQLNull, SQLNull]
+
+        return ()
 
 
 sharedDBPath :: String

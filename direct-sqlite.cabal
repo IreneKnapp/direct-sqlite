@@ -57,6 +57,8 @@ test-suite test
 
   hs-source-dirs: test
   main-is:        Main.hs
+  other-modules:
+    StrictEq
 
   ghc-options: -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind
 
