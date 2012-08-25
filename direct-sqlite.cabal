@@ -49,9 +49,10 @@ Library
     Database.SQLite3.Bindings.Types
 
   if flag(systemlib) {
+    cpp-options: -Ddirect_sqlite_systemlib
     extra-libraries: sqlite3
   } else {
-    c-sources: sqlite3.c
+    c-sources: cbits/sqlite3.c
   }
 
   include-dirs: .
