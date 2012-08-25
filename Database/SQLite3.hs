@@ -113,8 +113,8 @@ data SQLData
 data SQLError = SQLError
     { sqlError          :: !Error
         -- ^ Error code returned by API call
-    , sqlErrorDetails   :: (Maybe Text)
-        -- ^ Text describing the error, if available
+    , sqlErrorDetails   :: Text
+        -- ^ Text describing the error
     , sqlErrorContext   :: Text
         -- ^ Indicates what action produced this error,
         --   e.g. @exec \"SELECT * FROM foo\"@
@@ -136,9 +136,8 @@ instance Show SQLError where
          , T.pack $ show code
          , " while attempting to perform "
          , context
-         , case details of
-               Nothing -> "."
-               Just s  -> ": " `T.append` s
+         , ": "
+         , details
          ]
 
 instance Exception SQLError
@@ -151,27 +150,26 @@ toUtf8 :: Text -> Utf8
 toUtf8 = Utf8 . encodeUtf8
 
 data DetailSource
-    = DetailNone
-    | DetailDatabase Database
-    | DetailMessage  Utf8
+    = DetailDatabase    Database
+    | DetailStatement   Statement
+    | DetailMessage     Utf8
 
-renderDetailSource :: DetailSource -> IO (Maybe Text)
+renderDetailSource :: DetailSource -> IO Utf8
 renderDetailSource src = case src of
-    DetailNone ->
-        return Nothing
     DetailDatabase db ->
-        Just . fromUtf8Lenient <$> Direct.errmsg db
-    DetailMessage utf8 ->
-        return $ Just $ fromUtf8Lenient utf8
-  where
-    fromUtf8Lenient (Utf8 bs) = decodeUtf8With lenientDecode bs
+        Direct.errmsg db
+    DetailStatement stmt -> do
+        db <- Direct.getStatementDatabase stmt
+        Direct.errmsg db
+    DetailMessage msg ->
+        return msg
 
 throwSQLError :: DetailSource -> Text -> Error -> IO a
 throwSQLError detailSource context error = do
-    details <- renderDetailSource detailSource
+    Utf8 details <- renderDetailSource detailSource
     throwIO SQLError
         { sqlError        = error
-        , sqlErrorDetails = details
+        , sqlErrorDetails = decodeUtf8With lenientDecode details
         , sqlErrorContext = context
         }
 
@@ -221,7 +219,7 @@ prepare db sql = do
 -- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO StepResult
 step statement =
-    Direct.step statement >>= checkError DetailNone "step"
+    Direct.step statement >>= checkError (DetailStatement statement) "step"
 
 -- Note: sqlite3_reset and sqlite3_finalize return an error code if the most
 -- recent sqlite3_step indicated an error.  I think these are the only times
@@ -283,34 +281,34 @@ bindParameterName stmt idx = do
 bindBlob :: Statement -> ParamIndex -> ByteString -> IO ()
 bindBlob statement parameterIndex byteString =
     Direct.bindBlob statement parameterIndex byteString
-        >>= checkError DetailNone "bind blob"
+        >>= checkError (DetailStatement statement) "bind blob"
 
 bindDouble :: Statement -> ParamIndex -> Double -> IO ()
 bindDouble statement parameterIndex datum =
     Direct.bindDouble statement parameterIndex datum
-        >>= checkError DetailNone "bind double"
+        >>= checkError (DetailStatement statement) "bind double"
 
 bindInt :: Statement -> ParamIndex -> Int -> IO ()
 bindInt statement parameterIndex datum =
     Direct.bindInt64 statement
                      parameterIndex
                      (fromIntegral datum)
-        >>= checkError DetailNone "bind int"
+        >>= checkError (DetailStatement statement) "bind int"
 
 bindInt64 :: Statement -> ParamIndex -> Int64 -> IO ()
 bindInt64 statement parameterIndex datum =
     Direct.bindInt64 statement parameterIndex datum
-        >>= checkError DetailNone "bind int64"
+        >>= checkError (DetailStatement statement) "bind int64"
 
 bindNull :: Statement -> ParamIndex -> IO ()
 bindNull statement parameterIndex =
     Direct.bindNull statement parameterIndex
-        >>= checkError DetailNone "bind null"
+        >>= checkError (DetailStatement statement) "bind null"
 
 bindText :: Statement -> ParamIndex -> Text -> IO ()
 bindText statement parameterIndex text =
     Direct.bindText statement parameterIndex (toUtf8 text)
-        >>= checkError DetailNone "bind text"
+        >>= checkError (DetailStatement statement) "bind text"
 
 -- | If the index is not between 1 and 'bindParameterCount' inclusive, this
 -- fails with 'ErrorRange'.  Otherwise, it succeeds, even if the query skips
