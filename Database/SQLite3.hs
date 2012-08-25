@@ -34,6 +34,9 @@ module Database.SQLite3 (
 
     -- * Reading the result row
     -- | <http://www.sqlite.org/c3ref/column_blob.html>
+    --
+    -- Warning: 'column' and 'columns' will throw a 'DecodeError' if any @TEXT@
+    -- datum contains invalid UTF-8.
     column,
     columns,
     columnType,
@@ -86,13 +89,14 @@ import qualified Database.SQLite3.Direct as Direct
 
 import Prelude hiding (error)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
-import Control.Exception    (Exception, throwIO)
+import Control.Exception    (Exception, evaluate, throw, throwIO)
 import Control.Monad        (when, zipWithM_)
 import Data.ByteString      (ByteString)
 import Data.Int             (Int64)
 import Data.Text            (Text)
+import Data.Text.Encoding   (encodeUtf8, decodeUtf8With)
+import Data.Text.Encoding.Error (UnicodeException(..), lenientDecode)
 import Data.Typeable
 
 data SQLData
@@ -139,11 +143,12 @@ instance Show SQLError where
 
 instance Exception SQLError
 
-fromUtf8 :: Utf8 -> Text
-fromUtf8 (Utf8 bs) = T.decodeUtf8 bs
+fromUtf8 :: String -> Utf8 -> IO Text
+fromUtf8 desc (Utf8 bs) =
+    evaluate $ decodeUtf8With (\_ c -> throw (DecodeError desc c)) bs
 
 toUtf8 :: Text -> Utf8
-toUtf8 = Utf8 . T.encodeUtf8
+toUtf8 = Utf8 . encodeUtf8
 
 data DetailSource
     = DetailNone
@@ -154,11 +159,12 @@ renderDetailSource :: DetailSource -> IO (Maybe Text)
 renderDetailSource src = case src of
     DetailNone ->
         return Nothing
-    DetailDatabase db -> do
-        details <- fromUtf8 <$> Direct.errmsg db
-        return $ Just details
+    DetailDatabase db ->
+        Just . fromUtf8Lenient <$> Direct.errmsg db
     DetailMessage utf8 ->
-        return $ Just $ fromUtf8 utf8
+        return $ Just $ fromUtf8Lenient utf8
+  where
+    fromUtf8Lenient (Utf8 bs) = decodeUtf8With lenientDecode bs
 
 throwSQLError :: DetailSource -> Text -> Error -> IO a
 throwSQLError detailSource context error = do
@@ -266,9 +272,13 @@ finalize statement = do
 --
 -- Note that the parameter index starts at 1, not 0.
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Text)
-bindParameterName stmt idx =
-    fmap fromUtf8 <$>
-    Direct.bindParameterName stmt idx
+bindParameterName stmt idx = do
+    m <- Direct.bindParameterName stmt idx
+    case m of
+        Nothing   -> return Nothing
+        Just name -> Just <$> fromUtf8 desc name
+  where
+    desc = "Database.SQLite3.bindParameterName: Invalid UTF-8"
 
 bindBlob :: Statement -> ParamIndex -> ByteString -> IO ()
 bindBlob statement parameterIndex byteString =
@@ -299,7 +309,7 @@ bindNull statement parameterIndex =
 
 bindText :: Statement -> ParamIndex -> Text -> IO ()
 bindText statement parameterIndex text =
-    Direct.bindText statement parameterIndex (Utf8 $ T.encodeUtf8 text)
+    Direct.bindText statement parameterIndex (toUtf8 text)
         >>= checkError DetailNone "bind text"
 
 -- | If the index is not between 1 and 'bindParameterCount' inclusive, this
@@ -334,10 +344,14 @@ bind statement sqlData = do
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
     zipWithM_ (bindSQLData statement) [1..] sqlData
 
+-- |
+-- This will throw a 'DecodeError' if the datum contains invalid UTF-8.
+-- If this behavior is undesirable, you can use 'Direct.columnText' from
+-- "Database.SQLite3.Direct", which does not perform conversion to 'Text'.
 columnText :: Statement -> ColumnIndex -> IO Text
-columnText statement columnIndex = do
-    Utf8 bs <- Direct.columnText statement columnIndex
-    return $! T.decodeUtf8 bs
+columnText statement columnIndex =
+    Direct.columnText statement columnIndex
+        >>= fromUtf8 "Database.SQLite3.columnText: Invalid UTF-8"
 
 column :: Statement -> ColumnIndex -> IO SQLData
 column statement idx = do

@@ -10,6 +10,7 @@ import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
 import Control.Exception    (bracket, handleJust, try)
 import Control.Monad        (forM_, when)
 import Data.Text            (Text)
+import Data.Text.Encoding.Error (UnicodeException(..))
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
@@ -45,6 +46,7 @@ regressionTests =
     , TestLabel "Columns"       . testColumns
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
+    , TestLabel "DecodeError"   . testDecodeError
     ]
 
 featureTests :: [TestEnv -> Test]
@@ -424,6 +426,37 @@ testIntegrity TestEnv{..} = TestCase $ do
                 [SQLNull, SQLFloat (0/0), SQLNull, SQLNull, SQLNull]
 
         return ()
+
+testDecodeError :: TestEnv -> Test
+testDecodeError TestEnv{..} = TestCase $ do
+  withStmt conn "SELECT ?" $ \stmt -> do
+    Right () <- Direct.bindText stmt 1 invalidUtf8
+    Row <- step stmt
+    Left (DecodeError "Database.SQLite3.columnText: Invalid UTF-8" _)
+      <- try $ column stmt 0
+    return ()
+
+  -- Verify the assertion that SQLite3 does not validate UTF-8, by writing the
+  -- data to a table on disk and reading it back.
+  withConnShared $ \conn -> do
+    exec conn "CREATE TABLE testDecodeError (a TEXT)"
+    withStmt conn "INSERT INTO testDecodeError VALUES (?)" $ \stmt -> do
+      Right () <- Direct.bindText stmt 1 invalidUtf8
+      Done <- step stmt
+      return ()
+  withConnShared $ \conn -> do
+    withStmt conn "SELECT * FROM testDecodeError" $ \stmt -> do
+      Row <- step stmt
+      TextColumn <- columnType stmt 0
+      txt <- Direct.columnText stmt 0
+      assertEqual "testDecodeError: Database altered our invalid UTF-8" invalidUtf8 txt
+      Left (DecodeError "Database.SQLite3.columnText: Invalid UTF-8" _)
+        <- try $ columnText stmt 0
+      Done <- step stmt
+      return ()
+
+  where
+    invalidUtf8 = Direct.Utf8 $ B.pack [0x80]
 
 testMultiRowInsert :: TestEnv -> Test
 testMultiRowInsert TestEnv{..} = TestCase $ do
