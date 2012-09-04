@@ -29,7 +29,11 @@ module Database.SQLite3.Bindings.Types (
     c_SQLITE_TRANSIENT,
 ) where
 
-#include "sqlite3.h"
+#ifdef direct_sqlite_systemlib
+#include <sqlite3.h>
+#else
+#include "cbits/sqlite3.h"
+#endif
 
 import Foreign.C.Types
 import Foreign.Ptr

@@ -18,6 +18,7 @@ module Database.SQLite3.Direct (
 
     -- * Statement management
     prepare,
+    getStatementDatabase,
     step,
     reset,
     finalize,
@@ -187,6 +188,14 @@ prepare (Database db) (Utf8 sql) =
         alloca $ \statement ->
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
                 toResultM (wrapNullablePtr Statement <$> peek statement)
+
+-- | <http://www.sqlite.org/c3ref/db_handle.html>
+getStatementDatabase :: Statement -> IO Database
+getStatementDatabase (Statement stmt) = do
+    db <- c_sqlite3_db_handle stmt
+    if db == nullPtr
+        then fail $ "sqlite3_db_handle(" ++ show stmt ++ ") returned NULL"
+        else return (Database db)
 
 -- | <http://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO (Either Error StepResult)

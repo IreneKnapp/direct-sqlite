@@ -10,6 +10,7 @@ import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
 import Control.Exception    (bracket, handleJust, try)
 import Control.Monad        (forM_, when)
 import Data.Text            (Text)
+import Data.Text.Encoding.Error (UnicodeException(..))
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
@@ -32,8 +33,8 @@ data TestEnv =
     -- ^ Like 'withConn', but every invocation shares the same database.
   }
 
-tests :: [TestEnv -> Test]
-tests =
+regressionTests :: [TestEnv -> Test]
+regressionTests =
     [ TestLabel "Exec"          . testExec
     , TestLabel "Simple"        . testSimplest
     , TestLabel "Prepare"       . testPrepare
@@ -45,6 +46,12 @@ tests =
     , TestLabel "Columns"       . testColumns
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
+    , TestLabel "DecodeError"   . testDecodeError
+    ]
+
+featureTests :: [TestEnv -> Test]
+featureTests =
+    [ TestLabel "MultiRowInsert" . testMultiRowInsert
     ]
 
 assertFail :: IO a -> Assertion
@@ -231,7 +238,8 @@ testColumns TestEnv{..} = TestCase $ do
       Done <- step stmt
       2 <- columnCount stmt
       return ()
-    withStmt conn "INSERT INTO foo VALUES (3, 4), (5, 6)" command
+    withStmt conn "INSERT INTO foo VALUES (3, 4)" command
+    withStmt conn "INSERT INTO foo VALUES (5, 6)" command
     withStmt conn "SELECT * FROM foo" $ \stmt -> do
       2 <- columnCount stmt
       exec conn "ALTER TABLE foo ADD COLUMN c INT"
@@ -326,14 +334,12 @@ testErrors TestEnv{..} = TestCase $ do
   -- "BEGIN; ROLLBACK" causes running statements in the same connection to
   -- throw SQLITE_ABORT.
   withConnShared $ \conn -> do
-    exec conn "CREATE TABLE foo (a INT, b INT); \
-              \INSERT INTO foo VALUES (1, 2), (3, 4), (5, 6)"
+    foo123456 conn
     withStmt conn "SELECT * FROM foo" $ \stmt -> do
       -- "DROP TABLE foo" should succeed, since the statement
       -- isn't running yet.
       exec conn "DROP TABLE foo"
-      exec conn "CREATE TABLE foo (a INT, b INT); \
-                \INSERT INTO foo VALUES (1, 2), (3, 4), (5, 6)"
+      foo123456 conn
 
       Row <- step stmt
       2 <- columnCount stmt
@@ -372,12 +378,21 @@ testErrors TestEnv{..} = TestCase $ do
       Right () <- Direct.reset stmt
 
       -- But trying to 'step' again should fail.
-      expectError ErrorError $ step stmt
+      Left SQLError{sqlError = err} <- try $ step stmt
+      assertBool "Step after table vanishes should fail with SQLITE_ERROR or SQLITE_SCHEMA"
+                 (err == ErrorError ||  -- SQLite 3.7.13
+                  err == ErrorSchema)   -- SQLite 3.6.22
 
   where
     expectError err io = do
       Left SQLError{sqlError = err'} <- try io
-      assertEqual ("testErrors: expectError") err err'
+      assertEqual "testErrors: expectError" err err'
+
+    foo123456 conn =
+      exec conn "CREATE TABLE foo (a INT, b INT); \
+                \INSERT INTO foo VALUES (1, 2); \
+                \INSERT INTO foo VALUES (3, 4); \
+                \INSERT INTO foo VALUES (5, 6)"
 
 -- Make sure data stored in a table comes back as-is.
 testIntegrity :: TestEnv -> Test
@@ -412,6 +427,57 @@ testIntegrity TestEnv{..} = TestCase $ do
 
         return ()
 
+testDecodeError :: TestEnv -> Test
+testDecodeError TestEnv{..} = TestCase $ do
+  withStmt conn "SELECT ?" $ \stmt -> do
+    Right () <- Direct.bindText stmt 1 invalidUtf8
+    Row <- step stmt
+    Left (DecodeError "Database.SQLite3.columnText: Invalid UTF-8" _)
+      <- try $ column stmt 0
+    return ()
+
+  -- Verify the assertion that SQLite3 does not validate UTF-8, by writing the
+  -- data to a table on disk and reading it back.
+  withConnShared $ \conn -> do
+    exec conn "CREATE TABLE testDecodeError (a TEXT)"
+    withStmt conn "INSERT INTO testDecodeError VALUES (?)" $ \stmt -> do
+      Right () <- Direct.bindText stmt 1 invalidUtf8
+      Done <- step stmt
+      return ()
+  withConnShared $ \conn -> do
+    withStmt conn "SELECT * FROM testDecodeError" $ \stmt -> do
+      Row <- step stmt
+      TextColumn <- columnType stmt 0
+      txt <- Direct.columnText stmt 0
+      assertEqual "testDecodeError: Database altered our invalid UTF-8" invalidUtf8 txt
+      Left (DecodeError "Database.SQLite3.columnText: Invalid UTF-8" _)
+        <- try $ columnText stmt 0
+      Done <- step stmt
+      return ()
+
+  where
+    invalidUtf8 = Direct.Utf8 $ B.pack [0x80]
+
+testMultiRowInsert :: TestEnv -> Test
+testMultiRowInsert TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE foo (a INT, b INT)"
+    result <- try $ exec conn "INSERT INTO foo VALUES (1,2), (3,4)"
+    case result of
+      Left SQLError{sqlError = ErrorError} ->
+        assertFailure "Installed SQLite3 does not support multi-row INSERT via the VALUES clause"
+      Left e ->
+        assertFailure $ show e
+      Right () -> do
+        -- Make sure multi-row insert actually worked
+        withStmt conn "SELECT * FROM foo" $ \stmt -> do
+          Row <- step stmt
+          [SQLInteger 1, SQLInteger 2] <- columns stmt
+          Row <- step stmt
+          [SQLInteger 3, SQLInteger 4] <- columns stmt
+          Done <- step stmt
+          return ()
+
 
 sharedDBPath :: Text
 sharedDBPath = "dist/test/direct-sqlite-test-database.db"
@@ -428,6 +494,12 @@ withTestEnv cb =
     withConn          = withConnPath ":memory:"
     withConnPath path = bracket (open path) close
 
+runTestGroup :: [TestEnv -> Test] -> IO Bool
+runTestGroup tests = do
+  Counts{cases, tried, errors, failures} <-
+    withTestEnv $ \env -> runTestTT $ TestList $ map ($ env) tests
+  return (cases == tried && errors == 0 && failures == 0)
+
 main :: IO ()
 main = do
   mapM_ (`hSetBuffering` LineBuffering) [stdout, stderr]
@@ -440,7 +512,10 @@ main = do
              (removeFile $ T.unpack sharedDBPath)
   open sharedDBPath >>= close
 
-  Counts{cases, tried, errors, failures} <-
-    withTestEnv $ \env -> runTestTT $ TestList $ map ($ env) tests
-  when (cases /= tried || errors /= 0 || failures /= 0) $ exitFailure
+  ok <- runTestGroup regressionTests
+  when (not ok) exitFailure
 
+  -- Signal failure if feature tests fail.  I'd rather print a noisy warning
+  -- instead, but cabal redirects test output to log files by default.
+  ok <- runTestGroup featureTests
+  when (not ok) exitFailure

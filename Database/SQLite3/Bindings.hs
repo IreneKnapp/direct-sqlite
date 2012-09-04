@@ -15,6 +15,7 @@ module Database.SQLite3.Bindings (
 
     -- * Statement management
     c_sqlite3_prepare_v2,
+    c_sqlite3_db_handle,
     c_sqlite3_step,
     c_sqlite3_reset,
     c_sqlite3_finalize,
@@ -114,6 +115,10 @@ foreign import ccall "sqlite3_prepare_v2"
         -> Ptr (Ptr CStatement) -- ^ OUT: Statement handle.  This must not be null.
         -> Ptr CString          -- ^ OUT: Pointer to unused portion of zSql
         -> IO CError
+
+-- | <http://www.sqlite.org/c3ref/db_handle.html>
+foreign import ccall "sqlite3_db_handle"
+    c_sqlite3_db_handle :: Ptr CStatement -> IO (Ptr CDatabase)
 
 -- | <http://www.sqlite.org/c3ref/step.html>
 foreign import ccall "sqlite3_step"
