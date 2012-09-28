@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.1
+version: 2.2
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -22,7 +22,7 @@ description:
   .
   Release history:
   .
-  [Version 2.1.1] actually does what version 2.1 claimed to, since the author
+  [Version 2.2] actually does what version 2.1 claimed to, since the author
   made a mistake with git.
   .
   [Version 2.1] improves handling of invalid UTF-8 and changes error handling
