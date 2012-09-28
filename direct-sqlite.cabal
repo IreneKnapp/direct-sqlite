@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.0
+version: 2.1
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -7,17 +7,22 @@ copyright: Copyright (c) 2012 Irene Knapp
 author: Irene Knapp <ireney.knapp@gmail.com>
 maintainer: ireney.knapp@gmail.com
 homepage: http://ireneknapp.com/software/
-bug-reports: http://ireneknapp.com/issues/create/
+bug-reports: https://github.com/IreneKnapp/direct-sqlite/issues/new
 category: Database
 synopsis: Low-level binding to SQLite3.  Includes UTF8 and BLOB support.
 Cabal-version: >= 1.10
 Build-type: Simple
 description:
-  This package is not very different from the other SQLite3 bindings out there, but
-  it fixes a few deficiencies I was finding.  It is not as complete as bindings-sqlite3,
-  but is slightly higher-level, in that it supports marshalling of data values to and
-  from the database.  In particular, it supports strings encoded as UTF8, and BLOBs
-  represented as ByteStrings.
+  This package is not very different from the other SQLite3 bindings out
+  there, but it fixes a few deficiencies I was finding.  It is not as
+  complete as bindings-sqlite3, but is slightly higher-level, in that it
+  supports marshalling of data values to and from the database.  In
+  particular, it supports strings encoded as UTF8, and BLOBs represented
+  as ByteStrings.
+  
+  Version 2.1 improves handling of invalid UTF-8 and changes error handling
+  to be more complete.  It also adds a build flag to build against the system
+  sqlite instead of the bundled one, optionally (disabled by default).
   
   Version 2.0 uses Text for strings instead of String.
   
