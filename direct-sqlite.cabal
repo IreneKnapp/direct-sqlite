@@ -38,8 +38,8 @@ description:
   project, so that there are no external dependencies.
 
 extra-source-files:
-  sqlite3.c
-  sqlite3.h
+  cbits/sqlite3.c
+  cbits/sqlite3.h
 
 Source-Repository head
   type: git
