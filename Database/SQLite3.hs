@@ -186,9 +186,9 @@ appendShow txt a = txt `T.append` (T.pack . show) a
 
 
 -- | <http://www.sqlite.org/c3ref/open.html>
-open :: Text -> IO Database
+open :: String -> IO Database
 open path =
-    Direct.open (toUtf8 path)
+    Direct.open (toUtf8 . T.pack $ path)
         >>= checkErrorMsg ("open " `appendShow` path)
 
 -- | <http://www.sqlite.org/c3ref/close.html>
