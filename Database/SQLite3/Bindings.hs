@@ -117,7 +117,7 @@ foreign import ccall "sqlite3_prepare_v2"
         -> IO CError
 
 -- | <http://www.sqlite.org/c3ref/db_handle.html>
-foreign import ccall "sqlite3_db_handle"
+foreign import ccall unsafe "sqlite3_db_handle"
     c_sqlite3_db_handle :: Ptr CStatement -> IO (Ptr CDatabase)
 
 -- | <http://www.sqlite.org/c3ref/step.html>
@@ -141,7 +141,7 @@ foreign import ccall "sqlite3_finalize"
 -- | <http://www.sqlite.org/c3ref/clear_bindings.html>
 --
 -- A look at the source reveals that this function always returns @SQLITE_OK@.
-foreign import ccall "sqlite3_clear_bindings"
+foreign import ccall unsafe "sqlite3_clear_bindings"
     c_sqlite3_clear_bindings :: Ptr CStatement -> IO CError
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
@@ -149,19 +149,19 @@ foreign import ccall "sqlite3_clear_bindings"
 -- This returns the index of the largest (rightmost) parameter, which is not
 -- necessarily the number of parameters.  If numbered parameters like @?5@
 -- are used, there may be gaps in the list.
-foreign import ccall "sqlite3_bind_parameter_count"
+foreign import ccall unsafe "sqlite3_bind_parameter_count"
     c_sqlite3_bind_parameter_count :: Ptr CStatement -> IO ParamIndex
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
-foreign import ccall "sqlite3_bind_parameter_name"
+foreign import ccall unsafe "sqlite3_bind_parameter_name"
     c_sqlite3_bind_parameter_name :: Ptr CStatement -> ParamIndex -> IO CString
 
 -- | <http://www.sqlite.org/c3ref/column_count.html>
-foreign import ccall "sqlite3_column_count"
+foreign import ccall unsafe "sqlite3_column_count"
     c_sqlite3_column_count :: Ptr CStatement -> IO ColumnCount
 
 
-foreign import ccall "sqlite3_bind_blob"
+foreign import ccall unsafe "sqlite3_bind_blob"
     c_sqlite3_bind_blob
         :: Ptr CStatement
         -> ParamIndex       -- ^ Index of the SQL parameter to be set
@@ -173,7 +173,7 @@ foreign import ccall "sqlite3_bind_blob"
         -> Ptr CDestructor
         -> IO CError
 
-foreign import ccall "sqlite3_bind_text"
+foreign import ccall unsafe "sqlite3_bind_text"
     c_sqlite3_bind_text
         :: Ptr CStatement
         -> ParamIndex
@@ -184,32 +184,32 @@ foreign import ccall "sqlite3_bind_text"
         -> Ptr CDestructor
         -> IO CError
 
-foreign import ccall "sqlite3_bind_double"
+foreign import ccall unsafe "sqlite3_bind_double"
     c_sqlite3_bind_double   :: Ptr CStatement -> ParamIndex -> Double -> IO CError
 
-foreign import ccall "sqlite3_bind_int64"
+foreign import ccall unsafe "sqlite3_bind_int64"
     c_sqlite3_bind_int64    :: Ptr CStatement -> ParamIndex -> Int64 -> IO CError
 
-foreign import ccall "sqlite3_bind_null"
+foreign import ccall unsafe "sqlite3_bind_null"
     c_sqlite3_bind_null     :: Ptr CStatement -> ParamIndex -> IO CError
 
 
-foreign import ccall "sqlite3_column_type"
+foreign import ccall unsafe "sqlite3_column_type"
     c_sqlite3_column_type   :: Ptr CStatement -> ColumnIndex -> IO CColumnType
 
-foreign import ccall "sqlite3_column_bytes"
+foreign import ccall unsafe "sqlite3_column_bytes"
     c_sqlite3_column_bytes  :: Ptr CStatement -> ColumnIndex -> IO CNumBytes
 
-foreign import ccall "sqlite3_column_blob"
+foreign import ccall unsafe "sqlite3_column_blob"
     c_sqlite3_column_blob   :: Ptr CStatement -> ColumnIndex -> IO (Ptr a)
 
-foreign import ccall "sqlite3_column_text"
+foreign import ccall unsafe "sqlite3_column_text"
     c_sqlite3_column_text   :: Ptr CStatement -> ColumnIndex -> IO CString
 
-foreign import ccall "sqlite3_column_int64"
+foreign import ccall unsafe "sqlite3_column_int64"
     c_sqlite3_column_int64  :: Ptr CStatement -> ColumnIndex -> IO Int64
 
-foreign import ccall "sqlite3_column_double"
+foreign import ccall unsafe "sqlite3_column_double"
     c_sqlite3_column_double :: Ptr CStatement -> ColumnIndex -> IO Double
 
 
