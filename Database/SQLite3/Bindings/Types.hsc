@@ -131,6 +131,7 @@ newtype CNumBytes = CNumBytes CInt
 -- @Ptr CDestructor@ = @sqlite3_destructor_type@
 data CDestructor
 
+-- | Tells SQLite3 to make its own private copy of the data
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 
