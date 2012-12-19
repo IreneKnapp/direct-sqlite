@@ -240,63 +240,63 @@ clearBindings (Statement stmt) = do
 -- See 'ParamIndex' for more information.
 bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount (Statement stmt) =
-    c_sqlite3_bind_parameter_count stmt
+    fromFFI <$> c_sqlite3_bind_parameter_count stmt
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
 bindParameterName (Statement stmt) idx =
-    c_sqlite3_bind_parameter_name stmt idx >>=
+    c_sqlite3_bind_parameter_name stmt (toFFI idx) >>=
         packUtf8 Nothing Just
 
 -- | <http://www.sqlite.org/c3ref/column_count.html>
 columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
-    c_sqlite3_column_count stmt
+    fromFFI <$> c_sqlite3_column_count stmt
 
 bindInt64 :: Statement -> ParamIndex -> Int64 -> IO (Either Error ())
 bindInt64 (Statement stmt) idx value =
-    toResult () <$> c_sqlite3_bind_int64 stmt idx value
+    toResult () <$> c_sqlite3_bind_int64 stmt (toFFI idx) value
 
 bindDouble :: Statement -> ParamIndex -> Double -> IO (Either Error ())
 bindDouble (Statement stmt) idx value =
-    toResult () <$> c_sqlite3_bind_double stmt idx value
+    toResult () <$> c_sqlite3_bind_double stmt (toFFI idx) value
 
 bindText :: Statement -> ParamIndex -> Utf8 -> IO (Either Error ())
 bindText (Statement stmt) idx (Utf8 value) =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         toResult () <$>
-            c_sqlite3_bind_text stmt idx ptr len c_SQLITE_TRANSIENT
+            c_sqlite3_bind_text stmt (toFFI idx) ptr len c_SQLITE_TRANSIENT
 
 bindBlob :: Statement -> ParamIndex -> ByteString -> IO (Either Error ())
 bindBlob (Statement stmt) idx value =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         toResult () <$>
-            c_sqlite3_bind_blob stmt idx ptr len c_SQLITE_TRANSIENT
+            c_sqlite3_bind_blob stmt (toFFI idx) ptr len c_SQLITE_TRANSIENT
 
 bindNull :: Statement -> ParamIndex -> IO (Either Error ())
 bindNull (Statement stmt) idx =
-    toResult () <$> c_sqlite3_bind_null stmt idx
+    toResult () <$> c_sqlite3_bind_null stmt (toFFI idx)
 
 columnType :: Statement -> ColumnIndex -> IO ColumnType
 columnType (Statement stmt) idx =
-    decodeColumnType <$> c_sqlite3_column_type stmt idx
+    decodeColumnType <$> c_sqlite3_column_type stmt (toFFI idx)
 
 columnInt64 :: Statement -> ColumnIndex -> IO Int64
 columnInt64 (Statement stmt) idx =
-    c_sqlite3_column_int64 stmt idx
+    c_sqlite3_column_int64 stmt (toFFI idx)
 
 columnDouble :: Statement -> ColumnIndex -> IO Double
 columnDouble (Statement stmt) idx =
-    c_sqlite3_column_double stmt idx
+    c_sqlite3_column_double stmt (toFFI idx)
 
 columnText :: Statement -> ColumnIndex -> IO Utf8
 columnText (Statement stmt) idx = do
-    ptr <- c_sqlite3_column_text stmt idx
-    len <- c_sqlite3_column_bytes stmt idx
+    ptr <- c_sqlite3_column_text stmt (toFFI idx)
+    len <- c_sqlite3_column_bytes stmt (toFFI idx)
     Utf8 <$> packCStringLen ptr len
 
 columnBlob :: Statement -> ColumnIndex -> IO ByteString
 columnBlob (Statement stmt) idx = do
-    ptr <- c_sqlite3_column_blob stmt idx
-    len <- c_sqlite3_column_bytes stmt idx
+    ptr <- c_sqlite3_column_blob stmt (toFFI idx)
+    len <- c_sqlite3_column_bytes stmt (toFFI idx)
     packCStringLen ptr len
