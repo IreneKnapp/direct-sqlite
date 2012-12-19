@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.2.1
+version: 2.3
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -21,6 +21,9 @@ description:
   as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3] Mark some FFI calls "unsafe", for a substantial performance
+  benefit.
   .
   [Version 2.2.1] Bump down text library version to match with the
   latest Haskell Platform.
