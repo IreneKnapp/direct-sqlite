@@ -11,6 +11,7 @@ module Database.SQLite3.Direct (
     open,
     close,
     errmsg,
+    interrupt,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -159,6 +160,19 @@ open (Utf8 path) =
 close :: Database -> IO (Either Error ())
 close (Database db) =
     toResult () <$> c_sqlite3_close db
+
+-- | <http://www.sqlite.org/c3ref/interrupt.html>
+--
+-- Cause any pending operation on the 'Database' handle to stop at its earliest
+-- opportunity.  This simply sets a flag and returns immediately.  It does not
+-- wait for the pending operation to finish.
+--
+-- You'll need to compile with @-threaded@ for this to do any good.
+-- Without @-threaded@, FFI calls block the whole RTS, meaning 'interrupt'
+-- would never run at the same time as 'step'.
+interrupt :: Database -> IO ()
+interrupt (Database db) =
+    c_sqlite3_interrupt db
 
 -- | <http://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8

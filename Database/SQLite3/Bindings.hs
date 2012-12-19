@@ -6,6 +6,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_open,
     c_sqlite3_close,
     c_sqlite3_errmsg,
+    c_sqlite3_interrupt,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -66,6 +67,10 @@ foreign import ccall "sqlite3_close"
 -- | <http://www.sqlite.org/c3ref/errcode.html>
 foreign import ccall "sqlite3_errmsg"
     c_sqlite3_errmsg :: Ptr CDatabase -> IO CString
+
+-- | <http://www.sqlite.org/c3ref/interrupt.html>
+foreign import ccall "sqlite3_interrupt"
+    c_sqlite3_interrupt :: Ptr CDatabase -> IO ()
 
 
 foreign import ccall "sqlite3_exec"
