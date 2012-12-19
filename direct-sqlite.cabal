@@ -87,10 +87,12 @@ test-suite test
 
   ghc-options: -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind
 
-  extensions: NamedFieldPuns
-            , OverloadedStrings
-            , Rank2Types
-            , RecordWildCards
+  default-language: Haskell2010
+
+  default-extensions: NamedFieldPuns
+                    , OverloadedStrings
+                    , Rank2Types
+                    , RecordWildCards
 
   build-depends: base
                , base16-bytestring
