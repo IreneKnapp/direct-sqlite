@@ -5,9 +5,7 @@ import StrictEq
 import Database.SQLite3
 import qualified Database.SQLite3.Direct as Direct
 
-import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
-                                -- as Prelude no longer exports catch.
-import Control.Exception    (bracket, handleJust, try)
+import Control.Exception
 import Control.Monad        (forM_, when)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
@@ -491,8 +489,16 @@ withTestEnv cb =
             , withConnShared = withConnPath sharedDBPath
             }
   where
-    withConn          = withConnPath ":memory:"
-    withConnPath path = bracket (open path) close
+    withConn = withConnPath ":memory:"
+    withConnPath path cb = do
+      conn <- open path
+      r <- cb conn `onException` Direct.close conn
+            -- If the callback throws an exception, try to close the DB.
+            -- If closing fails (usually due to open 'Statement's),
+            -- throw the original error, not the error produced by 'close'.
+            -- Direct.close returns the error rather than throwing it.
+      close conn
+      return r
 
 runTestGroup :: [TestEnv -> Test] -> IO Bool
 runTestGroup tests = do
