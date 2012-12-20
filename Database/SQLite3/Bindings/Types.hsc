@@ -1,4 +1,6 @@
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Database.SQLite3.Bindings.Types (
     -- * Objects
@@ -11,11 +13,13 @@ module Database.SQLite3.Bindings.Types (
     -- ** Error
     CError(..),
     decodeError,
+    encodeError,
     Error(..),
 
     -- ** ColumnType
     CColumnType(..),
     decodeColumnType,
+    encodeColumnType,
     ColumnType(..),
 
     -- * Indices
@@ -23,10 +27,18 @@ module Database.SQLite3.Bindings.Types (
     ColumnIndex(..),
     ColumnCount,
 
+    -- ** Indices (FFI)
+    CParamIndex(..),
+    CColumnIndex(..),
+    CColumnCount,
+
     -- * Miscellaneous
     CNumBytes(..),
     CDestructor,
     c_SQLITE_TRANSIENT,
+
+    -- * Conversion to and from FFI types
+    FFIType(..),
 ) where
 
 #ifdef direct_sqlite_systemlib
@@ -105,7 +117,7 @@ data CStatement
 --
 -- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
 -- parameter placeholders, and how parameter indices are assigned.
-newtype ParamIndex = ParamIndex CInt
+newtype ParamIndex = ParamIndex Int
     deriving (Eq, Ord, Enum, Num, Real, Integral)
 
 -- | This just shows the underlying integer, without the data constructor.
@@ -113,7 +125,7 @@ instance Show ParamIndex where
     show (ParamIndex n) = show n
 
 -- | Index of a column in a result set.  Column indices start from 0.
-newtype ColumnIndex = ColumnIndex CInt
+newtype ColumnIndex = ColumnIndex Int
     deriving (Eq, Ord, Enum, Num, Real, Integral)
 
 -- | This just shows the underlying integer, without the data constructor.
@@ -123,6 +135,22 @@ instance Show ColumnIndex where
 -- | Number of columns in a result set.
 type ColumnCount = ColumnIndex
 
+newtype CParamIndex = CParamIndex CInt
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show CParamIndex where
+    show (CParamIndex n) = show n
+
+newtype CColumnIndex = CColumnIndex CInt
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show CColumnIndex where
+    show (CColumnIndex n) = show n
+
+type CColumnCount = CColumnIndex
+
 newtype CNumBytes = CNumBytes CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
@@ -131,13 +159,14 @@ newtype CNumBytes = CNumBytes CInt
 -- @Ptr CDestructor@ = @sqlite3_destructor_type@
 data CDestructor
 
+-- | Tells SQLite3 to make its own private copy of the data
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 
 
 -- | <http://www.sqlite.org/c3ref/c_abort.html>
 newtype CError = CError CInt
-    deriving Show
+    deriving (Eq, Show)
 
 -- | Note that this is a partial function.  If the error code is invalid, or
 -- perhaps introduced in a newer version of SQLite but this library has not
@@ -182,10 +211,42 @@ decodeError (CError n) = case n of
     #{const SQLITE_DONE}       -> ErrorDone
     _                          -> error $ "decodeError " ++ show n
 
+encodeError :: Error -> CError
+encodeError err = CError $ case err of
+    ErrorOK                 -> #const SQLITE_OK
+    ErrorError              -> #const SQLITE_ERROR
+    ErrorInternal           -> #const SQLITE_INTERNAL
+    ErrorPermission         -> #const SQLITE_PERM
+    ErrorAbort              -> #const SQLITE_ABORT
+    ErrorBusy               -> #const SQLITE_BUSY
+    ErrorLocked             -> #const SQLITE_LOCKED
+    ErrorNoMemory           -> #const SQLITE_NOMEM
+    ErrorReadOnly           -> #const SQLITE_READONLY
+    ErrorInterrupt          -> #const SQLITE_INTERRUPT
+    ErrorIO                 -> #const SQLITE_IOERR
+    ErrorCorrupt            -> #const SQLITE_CORRUPT
+    ErrorNotFound           -> #const SQLITE_NOTFOUND
+    ErrorFull               -> #const SQLITE_FULL
+    ErrorCan'tOpen          -> #const SQLITE_CANTOPEN
+    ErrorProtocol           -> #const SQLITE_PROTOCOL
+    ErrorEmpty              -> #const SQLITE_EMPTY
+    ErrorSchema             -> #const SQLITE_SCHEMA
+    ErrorTooBig             -> #const SQLITE_TOOBIG
+    ErrorConstraint         -> #const SQLITE_CONSTRAINT
+    ErrorMismatch           -> #const SQLITE_MISMATCH
+    ErrorMisuse             -> #const SQLITE_MISUSE
+    ErrorNoLargeFileSupport -> #const SQLITE_NOLFS
+    ErrorAuthorization      -> #const SQLITE_AUTH
+    ErrorFormat             -> #const SQLITE_FORMAT
+    ErrorRange              -> #const SQLITE_RANGE
+    ErrorNotADatabase       -> #const SQLITE_NOTADB
+    ErrorRow                -> #const SQLITE_ROW
+    ErrorDone               -> #const SQLITE_DONE
+
 
 -- | <http://www.sqlite.org/c3ref/c_blob.html>
 newtype CColumnType = CColumnType CInt
-    deriving Show
+    deriving (Eq, Show)
 
 -- | Note that this is a partial function.
 -- See 'decodeError' for more information.
@@ -197,3 +258,38 @@ decodeColumnType (CColumnType n) = case n of
     #{const SQLITE_BLOB}    -> BlobColumn
     #{const SQLITE_NULL}    -> NullColumn
     _                       -> error $ "decodeColumnType " ++ show n
+
+encodeColumnType :: ColumnType -> CColumnType
+encodeColumnType t = CColumnType $ case t of
+    IntegerColumn -> #const SQLITE_INTEGER
+    FloatColumn   -> #const SQLITE_FLOAT
+    TextColumn    -> #const SQLITE_TEXT
+    BlobColumn    -> #const SQLITE_BLOB
+    NullColumn    -> #const SQLITE_NULL
+
+------------------------------------------------------------------------
+-- Conversion to and from FFI types
+
+-- | The "Database.SQLite3" and "Database.SQLite3.Direct" modules use
+-- higher-level representations of some types than those used in the
+-- FFI signatures ("Database.SQLite3.Bindings").  This typeclass
+-- helps with the conversions.
+class FFIType public ffi | public -> ffi, ffi -> public where
+    toFFI   :: public -> ffi
+    fromFFI :: ffi -> public
+
+instance FFIType ParamIndex CParamIndex where
+    toFFI (ParamIndex n) = CParamIndex (fromIntegral n)
+    fromFFI (CParamIndex n) = ParamIndex (fromIntegral n)
+
+instance FFIType ColumnIndex CColumnIndex where
+    toFFI (ColumnIndex n) = CColumnIndex (fromIntegral n)
+    fromFFI (CColumnIndex n) = ColumnIndex (fromIntegral n)
+
+instance FFIType Error CError where
+    toFFI = encodeError
+    fromFFI = decodeError
+
+instance FFIType ColumnType CColumnType where
+    toFFI = encodeColumnType
+    fromFFI = decodeColumnType

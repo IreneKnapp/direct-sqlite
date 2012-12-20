@@ -1,13 +1,10 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-
 import StrictEq
 
 import Database.SQLite3
 import qualified Database.SQLite3.Direct as Direct
 
-import Prelude hiding (catch)   -- Remove this import when GHC 7.6 is released,
-                                -- as Prelude no longer exports catch.
-import Control.Exception    (bracket, handleJust, try)
+import Control.Concurrent
+import Control.Exception
 import Control.Monad        (forM_, when)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
@@ -47,7 +44,10 @@ regressionTests =
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
-    ]
+    ] ++
+    (if rtsSupportsBoundThreads then
+    [ TestLabel "Interrupt"     . testInterrupt
+    ] else [])
 
 featureTests :: [TestEnv -> Test]
 featureTests =
@@ -458,6 +458,29 @@ testDecodeError TestEnv{..} = TestCase $ do
   where
     invalidUtf8 = Direct.Utf8 $ B.pack [0x80]
 
+testInterrupt :: TestEnv -> Test
+testInterrupt TestEnv{..} = TestCase $
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE tbl (n INT)"
+
+    withStmt conn "INSERT INTO tbl VALUES (?)" $ \stmt -> do
+      exec conn "BEGIN"
+      forM_ [1..200] $ \i -> do
+          reset stmt
+          bind stmt [SQLInteger i]
+          Done <- step stmt
+          return ()
+      exec conn "COMMIT"
+
+    stmt <- prepare conn tripleSum
+    _ <- forkIO $ threadDelay 100000 >> interrupt conn
+    Left ErrorInterrupt <- Direct.step stmt
+    Left ErrorInterrupt <- Direct.finalize stmt
+    return ()
+
+  where
+    tripleSum = "SELECT sum(a.n + b.n + c.n) FROM tbl as a, tbl as b, tbl as c"
+
 testMultiRowInsert :: TestEnv -> Test
 testMultiRowInsert TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
@@ -491,8 +514,16 @@ withTestEnv cb =
             , withConnShared = withConnPath sharedDBPath
             }
   where
-    withConn          = withConnPath ":memory:"
-    withConnPath path = bracket (open path) close
+    withConn = withConnPath ":memory:"
+    withConnPath path cb = do
+      conn <- open path
+      r <- cb conn `onException` Direct.close conn
+            -- If the callback throws an exception, try to close the DB.
+            -- If closing fails (usually due to open 'Statement's),
+            -- throw the original error, not the error produced by 'close'.
+            -- Direct.close returns the error rather than throwing it.
+      close conn
+      return r
 
 runTestGroup :: [TestEnv -> Test] -> IO Bool
 runTestGroup tests = do
