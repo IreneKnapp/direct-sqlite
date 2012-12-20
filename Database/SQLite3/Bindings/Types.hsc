@@ -138,7 +138,7 @@ c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 
 -- | <http://www.sqlite.org/c3ref/c_abort.html>
 newtype CError = CError CInt
-    deriving Show
+    deriving (Eq, Show)
 
 -- | Note that this is a partial function.  If the error code is invalid, or
 -- perhaps introduced in a newer version of SQLite but this library has not
@@ -186,7 +186,7 @@ decodeError (CError n) = case n of
 
 -- | <http://www.sqlite.org/c3ref/c_blob.html>
 newtype CColumnType = CColumnType CInt
-    deriving Show
+    deriving (Eq, Show)
 
 -- | Note that this is a partial function.
 -- See 'decodeError' for more information.
