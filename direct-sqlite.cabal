@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3
+version: 2.3.1
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -21,6 +21,9 @@ description:
   as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3.1] Upgrade the bundled SQLite3 to 3.7.15.  Add bindings for
+  sqlite3_interrupt.  Export Int rather than CInt.
   .
   [Version 2.3] Mark some FFI calls "unsafe", for a substantial performance
   benefit.
