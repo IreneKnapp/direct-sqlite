@@ -45,6 +45,9 @@ module Database.SQLite3 (
     columnText,
     columnBlob,
 
+    -- * Interrupting a long-running query
+    interrupt,
+
     -- * Types
     Database,
     Statement,
@@ -76,6 +79,7 @@ import Database.SQLite3.Direct
     -- Re-exported from Database.SQLite3.Direct without modification.
     -- Note that if this module were in another package, source links would not
     -- be generated for these functions.
+    , interrupt
     , clearBindings
     , bindParameterCount
     , columnCount

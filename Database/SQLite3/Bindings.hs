@@ -6,6 +6,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_open,
     c_sqlite3_close,
     c_sqlite3_errmsg,
+    c_sqlite3_interrupt,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -67,6 +68,10 @@ foreign import ccall "sqlite3_close"
 foreign import ccall "sqlite3_errmsg"
     c_sqlite3_errmsg :: Ptr CDatabase -> IO CString
 
+-- | <http://www.sqlite.org/c3ref/interrupt.html>
+foreign import ccall "sqlite3_interrupt"
+    c_sqlite3_interrupt :: Ptr CDatabase -> IO ()
+
 
 foreign import ccall "sqlite3_exec"
     c_sqlite3_exec
@@ -79,7 +84,7 @@ foreign import ccall "sqlite3_exec"
 
 type CExecCallback a
      = Ptr a
-    -> ColumnCount  -- ^ Number of columns, which is the number of elements in
+    -> CColumnCount -- ^ Number of columns, which is the number of elements in
                     --   the following arrays.
     -> Ptr CString  -- ^ Array of column names
     -> Ptr CString  -- ^ Array of column values, as returned by
@@ -150,21 +155,21 @@ foreign import ccall unsafe "sqlite3_clear_bindings"
 -- necessarily the number of parameters.  If numbered parameters like @?5@
 -- are used, there may be gaps in the list.
 foreign import ccall unsafe "sqlite3_bind_parameter_count"
-    c_sqlite3_bind_parameter_count :: Ptr CStatement -> IO ParamIndex
+    c_sqlite3_bind_parameter_count :: Ptr CStatement -> IO CParamIndex
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
 foreign import ccall unsafe "sqlite3_bind_parameter_name"
-    c_sqlite3_bind_parameter_name :: Ptr CStatement -> ParamIndex -> IO CString
+    c_sqlite3_bind_parameter_name :: Ptr CStatement -> CParamIndex -> IO CString
 
 -- | <http://www.sqlite.org/c3ref/column_count.html>
 foreign import ccall unsafe "sqlite3_column_count"
-    c_sqlite3_column_count :: Ptr CStatement -> IO ColumnCount
+    c_sqlite3_column_count :: Ptr CStatement -> IO CColumnCount
 
 
 foreign import ccall unsafe "sqlite3_bind_blob"
     c_sqlite3_bind_blob
         :: Ptr CStatement
-        -> ParamIndex       -- ^ Index of the SQL parameter to be set
+        -> CParamIndex      -- ^ Index of the SQL parameter to be set
         -> Ptr a            -- ^ Value to bind to the parameter.
                             --
                             --   /Warning:/ If this pointer is @NULL@, this
@@ -176,7 +181,7 @@ foreign import ccall unsafe "sqlite3_bind_blob"
 foreign import ccall unsafe "sqlite3_bind_text"
     c_sqlite3_bind_text
         :: Ptr CStatement
-        -> ParamIndex
+        -> CParamIndex
         -> CString          -- ^ /Warning:/ If this pointer is @NULL@, this
                             --   will bind a null value, rather than an empty text.
         -> CNumBytes        -- ^ Length, in bytes.  If this is negative,
@@ -185,32 +190,32 @@ foreign import ccall unsafe "sqlite3_bind_text"
         -> IO CError
 
 foreign import ccall unsafe "sqlite3_bind_double"
-    c_sqlite3_bind_double   :: Ptr CStatement -> ParamIndex -> Double -> IO CError
+    c_sqlite3_bind_double   :: Ptr CStatement -> CParamIndex -> Double -> IO CError
 
 foreign import ccall unsafe "sqlite3_bind_int64"
-    c_sqlite3_bind_int64    :: Ptr CStatement -> ParamIndex -> Int64 -> IO CError
+    c_sqlite3_bind_int64    :: Ptr CStatement -> CParamIndex -> Int64 -> IO CError
 
 foreign import ccall unsafe "sqlite3_bind_null"
-    c_sqlite3_bind_null     :: Ptr CStatement -> ParamIndex -> IO CError
+    c_sqlite3_bind_null     :: Ptr CStatement -> CParamIndex -> IO CError
 
 
 foreign import ccall unsafe "sqlite3_column_type"
-    c_sqlite3_column_type   :: Ptr CStatement -> ColumnIndex -> IO CColumnType
+    c_sqlite3_column_type   :: Ptr CStatement -> CColumnIndex -> IO CColumnType
 
 foreign import ccall unsafe "sqlite3_column_bytes"
-    c_sqlite3_column_bytes  :: Ptr CStatement -> ColumnIndex -> IO CNumBytes
+    c_sqlite3_column_bytes  :: Ptr CStatement -> CColumnIndex -> IO CNumBytes
 
 foreign import ccall unsafe "sqlite3_column_blob"
-    c_sqlite3_column_blob   :: Ptr CStatement -> ColumnIndex -> IO (Ptr a)
+    c_sqlite3_column_blob   :: Ptr CStatement -> CColumnIndex -> IO (Ptr a)
 
 foreign import ccall unsafe "sqlite3_column_text"
-    c_sqlite3_column_text   :: Ptr CStatement -> ColumnIndex -> IO CString
+    c_sqlite3_column_text   :: Ptr CStatement -> CColumnIndex -> IO CString
 
 foreign import ccall unsafe "sqlite3_column_int64"
-    c_sqlite3_column_int64  :: Ptr CStatement -> ColumnIndex -> IO Int64
+    c_sqlite3_column_int64  :: Ptr CStatement -> CColumnIndex -> IO Int64
 
 foreign import ccall unsafe "sqlite3_column_double"
-    c_sqlite3_column_double :: Ptr CStatement -> ColumnIndex -> IO Double
+    c_sqlite3_column_double :: Ptr CStatement -> CColumnIndex -> IO Double
 
 
 -- | <http://sqlite.org/c3ref/free.html>
