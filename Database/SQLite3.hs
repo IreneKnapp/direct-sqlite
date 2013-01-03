@@ -340,7 +340,7 @@ bindSQLData statement idx datum =
 -- 'fail' if the list has the wrong number of parameters.
 bind :: Statement -> [SQLData] -> IO ()
 bind statement sqlData = do
-    nParams <- fromIntegral <$> bindParameterCount statement
+    ParamIndex nParams <- bindParameterCount statement
     when (nParams /= length sqlData) $
         fail ("mismatched parameter count for bind.  Prepared statement "++
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
