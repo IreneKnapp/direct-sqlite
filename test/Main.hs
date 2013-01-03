@@ -5,7 +5,7 @@ import qualified Database.SQLite3.Direct as Direct
 
 import Control.Concurrent
 import Control.Exception
-import Control.Monad        (forM_, when)
+import Control.Monad        (forM_, liftM3, when)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
 import System.Directory
@@ -44,6 +44,7 @@ regressionTests =
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
+    , TestLabel "ResultStats"   . testResultStats
     ] ++
     (if rtsSupportsBoundThreads then
     [ TestLabel "Interrupt"     . testInterrupt
@@ -458,6 +459,35 @@ testDecodeError TestEnv{..} = TestCase $ do
   where
     invalidUtf8 = Direct.Utf8 $ B.pack [0x80]
 
+testResultStats :: TestEnv -> Test
+testResultStats TestEnv{..} = TestCase $
+  withConn $ \conn -> do
+    (0, 0, 0) <- stats conn
+    exec conn "CREATE TABLE tbl (n INTEGER PRIMARY KEY)"
+    (0, 0, 0) <- stats conn
+    exec conn "INSERT INTO tbl DEFAULT VALUES"
+    (1, 1, 1) <- stats conn
+    exec conn "INSERT INTO tbl VALUES (123)"
+    (123, 1, 2) <- stats conn
+    exec conn "INSERT INTO tbl VALUES (9223372036854775807)"
+    (maxBound, 1, 3) <- stats conn
+    exec conn "INSERT INTO tbl DEFAULT VALUES"  -- picks a rowid at random
+    (rowid, 1, 4) <- stats conn
+    True <- return $ (`notElem` [1, 123, maxBound]) rowid
+    exec conn "UPDATE tbl SET rowid=rowid+1 WHERE rowid=1 OR rowid=123"
+    (_, 2, 6) <- stats conn
+    Left SQLError{ sqlError = ErrorConstraint }
+      <- try $ exec conn "UPDATE tbl SET rowid=4"
+    (_, 1, 7) <- stats conn -- quirky behavior
+    exec conn "DELETE FROM tbl"
+    (_, 4, 11) <- stats conn
+    return ()
+  where
+    stats conn =
+      liftM3 (,,) (lastInsertRowId conn)
+                  (changes conn)
+                  (Direct.totalChanges conn)
+
 testInterrupt :: TestEnv -> Test
 testInterrupt TestEnv{..} = TestCase $
   withConn $ \conn -> do
@@ -493,6 +523,7 @@ testMultiRowInsert TestEnv{..} = TestCase $ do
         assertFailure $ show e
       Right () -> do
         -- Make sure multi-row insert actually worked
+        2 <- changes conn
         withStmt conn "SELECT * FROM foo" $ \stmt -> do
           Row <- step stmt
           [SQLInteger 1, SQLInteger 2] <- columns stmt

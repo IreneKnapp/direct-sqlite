@@ -45,6 +45,10 @@ module Database.SQLite3 (
     columnText,
     columnBlob,
 
+    -- * Result statistics
+    lastInsertRowId,
+    changes,
+
     -- * Interrupting a long-running query
     interrupt,
 
@@ -79,7 +83,6 @@ import Database.SQLite3.Direct
     -- Re-exported from Database.SQLite3.Direct without modification.
     -- Note that if this module were in another package, source links would not
     -- be generated for these functions.
-    , interrupt
     , clearBindings
     , bindParameterCount
     , columnCount
@@ -87,6 +90,9 @@ import Database.SQLite3.Direct
     , columnBlob
     , columnInt64
     , columnDouble
+    , lastInsertRowId
+    , changes
+    , interrupt
     )
 
 import qualified Database.SQLite3.Direct as Direct

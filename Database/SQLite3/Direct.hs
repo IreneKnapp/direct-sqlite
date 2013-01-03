@@ -46,6 +46,11 @@ module Database.SQLite3.Direct (
     columnText,
     columnBlob,
 
+    -- * Result statistics
+    lastInsertRowId,
+    changes,
+    totalChanges,
+
     -- * Types
     Database(..),
     Statement(..),
@@ -314,3 +319,25 @@ columnBlob (Statement stmt) idx = do
     ptr <- c_sqlite3_column_blob stmt (toFFI idx)
     len <- c_sqlite3_column_bytes stmt (toFFI idx)
     packCStringLen ptr len
+
+
+-- | <http://www.sqlite.org/c3ref/last_insert_rowid.html>
+lastInsertRowId :: Database -> IO Int64
+lastInsertRowId (Database db) =
+    c_sqlite3_last_insert_rowid db
+
+-- | <http://www.sqlite.org/c3ref/changes.html>
+--
+-- Return the number of rows that were changed, inserted, or deleted
+-- by the most recent @INSERT@, @DELETE@, or @UPDATE@ statement.
+changes :: Database -> IO Int
+changes (Database db) =
+    fromIntegral <$> c_sqlite3_changes db
+
+-- | <http://www.sqlite.org/c3ref/total_changes.html>
+--
+-- Return the total number of row changes caused by @INSERT@, @DELETE@,
+-- or @UPDATE@ statements since the 'Database' was opened.
+totalChanges :: Database -> IO Int
+totalChanges (Database db) =
+    fromIntegral <$> c_sqlite3_total_changes db
