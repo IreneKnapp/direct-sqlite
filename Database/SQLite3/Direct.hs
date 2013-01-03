@@ -75,7 +75,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
 import Data.ByteString      (ByteString)
+import Data.Monoid
 import Data.String          (IsString(..))
+import Data.Text.Encoding.Error (lenientDecode)
 import Foreign
 import Foreign.C
 
@@ -92,11 +94,19 @@ data StepResult
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
-    deriving (Eq, Show)
+    deriving (Eq, Ord)
+
+instance Show Utf8 where
+    show (Utf8 s) = (show . T.decodeUtf8With lenientDecode) s
 
 -- | @fromString = Utf8 . 'T.encodeUtf8' . 'T.pack'@
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
+
+instance Monoid Utf8 where
+    mempty = Utf8 BS.empty
+    mappend (Utf8 a) (Utf8 b) = Utf8 (BS.append a b)
+    mconcat = Utf8 . BS.concat . map (\(Utf8 s) -> s)
 
 packUtf8 :: a -> (Utf8 -> a) -> CString -> IO a
 packUtf8 n f cstr | cstr == nullPtr = return n
