@@ -86,11 +86,11 @@ type CExecCallback a
      = Ptr a
     -> CColumnCount -- ^ Number of columns, which is the number of elements in
                     --   the following arrays.
-    -> Ptr CString  -- ^ Array of column names
     -> Ptr CString  -- ^ Array of column values, as returned by
                     --   'c_sqlite3_column_text'.  Null values are represented
                     --   as null pointers.
-    -> CInt         -- ^ If the callback returns non-zero, then
+    -> Ptr CString  -- ^ Array of column names
+    -> IO CInt      -- ^ If the callback returns non-zero, then
                     --   'c_sqlite3_exec' returns @SQLITE_ABORT@
                     --   ('ErrorAbort').
 
