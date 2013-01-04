@@ -44,6 +44,11 @@ module Database.SQLite3.Bindings (
     c_sqlite3_column_double,
     c_sqlite3_column_text,
 
+    -- * Result statistics
+    c_sqlite3_last_insert_rowid,
+    c_sqlite3_changes,
+    c_sqlite3_total_changes,
+
     -- * Miscellaneous
     c_sqlite3_free,
 ) where
@@ -86,11 +91,11 @@ type CExecCallback a
      = Ptr a
     -> CColumnCount -- ^ Number of columns, which is the number of elements in
                     --   the following arrays.
-    -> Ptr CString  -- ^ Array of column names
     -> Ptr CString  -- ^ Array of column values, as returned by
                     --   'c_sqlite3_column_text'.  Null values are represented
                     --   as null pointers.
-    -> CInt         -- ^ If the callback returns non-zero, then
+    -> Ptr CString  -- ^ Array of column names
+    -> IO CInt      -- ^ If the callback returns non-zero, then
                     --   'c_sqlite3_exec' returns @SQLITE_ABORT@
                     --   ('ErrorAbort').
 
@@ -216,6 +221,19 @@ foreign import ccall unsafe "sqlite3_column_int64"
 
 foreign import ccall unsafe "sqlite3_column_double"
     c_sqlite3_column_double :: Ptr CStatement -> CColumnIndex -> IO Double
+
+
+-- | <http://www.sqlite.org/c3ref/last_insert_rowid.html>
+foreign import ccall unsafe "sqlite3_last_insert_rowid"
+    c_sqlite3_last_insert_rowid :: Ptr CDatabase -> IO Int64
+
+-- | <http://www.sqlite.org/c3ref/changes.html>
+foreign import ccall unsafe "sqlite3_changes"
+    c_sqlite3_changes :: Ptr CDatabase -> IO CInt
+
+-- | <http://www.sqlite.org/c3ref/total_changes.html>
+foreign import ccall unsafe "sqlite3_total_changes"
+    c_sqlite3_total_changes :: Ptr CDatabase -> IO CInt
 
 
 -- | <http://sqlite.org/c3ref/free.html>
