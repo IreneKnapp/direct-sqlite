@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Database.SQLite3 (
@@ -8,6 +10,9 @@ module Database.SQLite3 (
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
     exec,
+    execPrint,
+    execWithCallback,
+    ExecCallback,
 
     -- * Statement management
     prepare,
@@ -45,8 +50,13 @@ module Database.SQLite3 (
     columnText,
     columnBlob,
 
+    -- * Result statistics
+    lastInsertRowId,
+    changes,
+
     -- * Interrupting a long-running query
     interrupt,
+    interruptibly,
 
     -- * Types
     Database,
@@ -79,7 +89,6 @@ import Database.SQLite3.Direct
     -- Re-exported from Database.SQLite3.Direct without modification.
     -- Note that if this module were in another package, source links would not
     -- be generated for these functions.
-    , interrupt
     , clearBindings
     , bindParameterCount
     , columnCount
@@ -87,17 +96,23 @@ import Database.SQLite3.Direct
     , columnBlob
     , columnInt64
     , columnDouble
+    , lastInsertRowId
+    , changes
+    , interrupt
     )
 
 import qualified Database.SQLite3.Direct as Direct
 
 import Prelude hiding (error)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Control.Applicative  ((<$>))
-import Control.Exception    (Exception, evaluate, throw, throwIO)
+import Control.Concurrent
+import Control.Exception
 import Control.Monad        (when, zipWithM_)
 import Data.ByteString      (ByteString)
 import Data.Int             (Int64)
+import Data.Maybe           (fromMaybe)
 import Data.Text            (Text)
 import Data.Text.Encoding   (encodeUtf8, decodeUtf8With)
 import Data.Text.Encoding.Error (UnicodeException(..), lenientDecode)
@@ -146,9 +161,14 @@ instance Show SQLError where
 
 instance Exception SQLError
 
+-- | Like 'decodeUtf8', but substitute a custom error message if
+-- decoding fails.
 fromUtf8 :: String -> Utf8 -> IO Text
-fromUtf8 desc (Utf8 bs) =
-    evaluate $ decodeUtf8With (\_ c -> throw (DecodeError desc c)) bs
+fromUtf8 desc utf8 = evaluate $ fromUtf8' desc utf8
+
+fromUtf8' :: String -> Utf8 -> Text
+fromUtf8' desc (Utf8 bs) =
+    decodeUtf8With (\_ c -> throw (DecodeError desc c)) bs
 
 toUtf8 :: Text -> Utf8
 toUtf8 = Utf8 . encodeUtf8
@@ -200,11 +220,91 @@ close :: Database -> IO ()
 close db =
     Direct.close db >>= checkError (DetailDatabase db) "close"
 
+-- | Make it possible to interrupt the given database operation with an
+-- asynchronous exception.  This only works if the program is compiled with
+-- base >= 4.3 and @-threaded@.
+--
+-- It works by running the callback in a forked thread.  If interrupted,
+-- it uses 'interrupt' to try to stop the operation.
+interruptibly :: Database -> IO a -> IO a
+#if MIN_VERSION_base(4,3,0)
+interruptibly db io
+  | rtsSupportsBoundThreads =
+      mask $ \restore -> do
+          mv <- newEmptyMVar
+          tid <- forkIO $ try' (restore io) >>= putMVar mv
+
+          let interruptAndWait =
+                  -- Don't let a second exception interrupt us.  Otherwise,
+                  -- the operation will dangle in the background, which could
+                  -- be really bad if it uses locally-allocated resources.
+                  uninterruptibleMask_ $ do
+                      -- Tell SQLite3 to interrupt the current query.
+                      interrupt db
+
+                      -- Interrupt the thread in case it's blocked for some
+                      -- other reason.
+                      --
+                      -- NOTE: killThread blocks until the exception is delivered.
+                      -- That's fine, since we're going to wait for the thread
+                      -- to finish anyway.
+                      killThread tid
+
+                      -- Wait for the forked thread to finish.
+                      _ <- takeMVar mv
+                      return ()
+
+          e <- takeMVar mv `onException` interruptAndWait
+          either throwIO return e
+  | otherwise = io
+  where
+    try' :: IO a -> IO (Either SomeException a)
+    try' = try
+#else
+interruptibly _db io = io
+#endif
+
 -- | Execute zero or more SQL statements delimited by semicolons.
 exec :: Database -> Text -> IO ()
 exec db sql =
     Direct.exec db (toUtf8 sql)
         >>= checkErrorMsg ("exec " `appendShow` sql)
+
+-- | Like 'exec', but print result rows to 'System.IO.stdout'.
+--
+-- This is mainly for convenience when experimenting in GHCi.
+-- The output format may change in the future.
+execPrint :: Database -> Text -> IO ()
+execPrint !db !sql =
+    interruptibly db $
+    execWithCallback db sql $ \_count _colnames -> T.putStrLn . showValues
+  where
+    -- This mimics sqlite3's default output mode.  It displays a NULL and an
+    -- empty string identically.
+    showValues = T.intercalate "|" . map (fromMaybe "")
+
+-- | Like 'exec', but invoke the callback for each result row.
+execWithCallback :: Database -> Text -> ExecCallback -> IO ()
+execWithCallback db sql cb =
+    Direct.execWithCallback db (toUtf8 sql) cb'
+        >>= checkErrorMsg ("execWithCallback " `appendShow` sql)
+  where
+    -- We want 'names' computed once and shared with every call.
+    cb' count namesUtf8 =
+       let names = map fromUtf8'' namesUtf8
+           {-# NOINLINE names #-}
+        in \valuesUtf8 -> cb count names (map (fmap fromUtf8'') valuesUtf8)
+
+    fromUtf8'' = fromUtf8' "Database.SQLite3.execWithCallback: Invalid UTF-8"
+
+type ExecCallback
+     = ColumnCount    -- ^ Number of columns, which is the number of items in
+                      --   the following lists.  This will be the same for
+                      --   every row.
+    -> [Text]         -- ^ List of column names.  This will be the same
+                      --   for every row.
+    -> [Maybe Text]   -- ^ List of column values, as returned by 'columnText'.
+    -> IO ()
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
@@ -340,7 +440,7 @@ bindSQLData statement idx datum =
 -- 'fail' if the list has the wrong number of parameters.
 bind :: Statement -> [SQLData] -> IO ()
 bind statement sqlData = do
-    nParams <- fromIntegral <$> bindParameterCount statement
+    ParamIndex nParams <- bindParameterCount statement
     when (nParams /= length sqlData) $
         fail ("mismatched parameter count for bind.  Prepared statement "++
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")

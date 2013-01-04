@@ -89,7 +89,8 @@ test-suite test
 
   default-language: Haskell2010
 
-  default-extensions: NamedFieldPuns
+  default-extensions: DeriveDataTypeable
+                    , NamedFieldPuns
                     , OverloadedStrings
                     , Rank2Types
                     , RecordWildCards

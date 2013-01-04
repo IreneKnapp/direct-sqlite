@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
@@ -11,11 +12,12 @@ module Database.SQLite3.Direct (
     open,
     close,
     errmsg,
-    interrupt,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
     exec,
+    execWithCallback,
+    ExecCallback,
 
     -- * Statement management
     prepare,
@@ -46,6 +48,14 @@ module Database.SQLite3.Direct (
     columnText,
     columnBlob,
 
+    -- * Result statistics
+    lastInsertRowId,
+    changes,
+    totalChanges,
+
+    -- * Interrupting a long-running query
+    interrupt,
+
     -- * Types
     Database(..),
     Statement(..),
@@ -69,8 +79,13 @@ import qualified Data.ByteString.Unsafe     as BSU
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
+import Control.Exception as E
+import Control.Monad        (join)
 import Data.ByteString      (ByteString)
+import Data.IORef
+import Data.Monoid
 import Data.String          (IsString(..))
+import Data.Text.Encoding.Error (lenientDecode)
 import Foreign
 import Foreign.C
 
@@ -87,11 +102,19 @@ data StepResult
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
-    deriving (Eq, Show)
+    deriving (Eq, Ord)
+
+instance Show Utf8 where
+    show (Utf8 s) = (show . T.decodeUtf8With lenientDecode) s
 
 -- | @fromString = Utf8 . 'T.encodeUtf8' . 'T.pack'@
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
+
+instance Monoid Utf8 where
+    mempty = Utf8 BS.empty
+    mappend (Utf8 a) (Utf8 b) = Utf8 (BS.append a b)
+    mconcat = Utf8 . BS.concat . map (\(Utf8 s) -> s)
 
 packUtf8 :: a -> (Utf8 -> a) -> CString -> IO a
 packUtf8 n f cstr | cstr == nullPtr = return n
@@ -100,6 +123,10 @@ packUtf8 n f cstr | cstr == nullPtr = return n
 packCStringLen :: CString -> CNumBytes -> IO ByteString
 packCStringLen cstr len =
     BS.packCStringLen (cstr, fromIntegral len)
+
+packUtf8Array :: IO a -> (Utf8 -> IO a) -> Int -> Ptr CString -> IO [a]
+packUtf8Array onNull onUtf8 count base =
+    peekArray count base >>= mapM (join . packUtf8 onNull onUtf8)
 
 -- | Like 'unsafeUseAsCStringLen', but if the string is empty,
 -- never pass the callback a null pointer.
@@ -191,6 +218,71 @@ exec (Database db) (Utf8 sql) =
                 c_sqlite3_free msgPtr
                 return $ Left (err, msg)
             Right () -> return $ Right ()
+
+-- | Like 'exec', but invoke the callback for each result row.
+--
+-- If the callback throws an exception, it will be rethrown by
+-- 'execWithCallback'.
+execWithCallback :: Database -> Utf8 -> ExecCallback -> IO (Either (Error, Utf8) ())
+execWithCallback (Database db) (Utf8 sql) cb = do
+    abortReason <- newIORef Nothing :: IO (IORef (Maybe SomeException))
+    cbCache <- newIORef Nothing :: IO (IORef (Maybe ([Maybe Utf8] -> IO ())))
+        -- Cache the partial application of column count and name, so if the
+        -- caller wants to convert them to something else, it only has to do
+        -- the conversions once.
+
+    let getCallback cCount cNames = do
+            m <- readIORef cbCache
+            case m of
+                Nothing -> do
+                    names <- packUtf8Array (fail "execWithCallback: NULL column name")
+                                           return
+                                           (fromIntegral cCount) cNames
+                    let !cb' = cb (fromFFI cCount) names
+                    writeIORef cbCache $ Just cb'
+                    return cb'
+                Just cb' -> return cb'
+
+    let onExceptionAbort io =
+          (io >> return 0) `E.catch` \ex -> do
+            writeIORef abortReason $ Just ex
+            return 1
+
+    let cExecCallback _ctx cCount cValues cNames =
+          onExceptionAbort $ do
+            cb' <- getCallback cCount cNames
+            values <- packUtf8Array (return Nothing)
+                                    (return . Just)
+                                    (fromIntegral cCount) cValues
+            cb' values
+
+    BS.useAsCString sql $ \sql' ->
+      alloca $ \msgPtrOut ->
+      bracket (mkCExecCallback cExecCallback) freeHaskellFunPtr $
+      \pExecCallback -> do
+        let returnError err = do
+                msgPtr <- peek msgPtrOut
+                msg <- packUtf8 (Utf8 BS.empty) id msgPtr
+                c_sqlite3_free msgPtr
+                return $ Left (err, msg)
+        rc <- c_sqlite3_exec db sql' pExecCallback nullPtr msgPtrOut
+        case toResult () rc of
+            Left ErrorAbort -> do
+                m <- readIORef abortReason
+                case m of
+                    Nothing -> returnError ErrorAbort
+                    Just ex -> throwIO ex
+            Left err -> returnError err
+            Right () -> return $ Right ()
+
+type ExecCallback
+     = ColumnCount    -- ^ Number of columns, which is the number of items in
+                      --   the following lists.  This will be the same for
+                      --   every row.
+    -> [Utf8]         -- ^ List of column names.  This will be the same
+                      --   for every row.
+    -> [Maybe Utf8]   -- ^ List of column values, as returned by 'columnText'.
+    -> IO ()
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
@@ -314,3 +406,25 @@ columnBlob (Statement stmt) idx = do
     ptr <- c_sqlite3_column_blob stmt (toFFI idx)
     len <- c_sqlite3_column_bytes stmt (toFFI idx)
     packCStringLen ptr len
+
+
+-- | <http://www.sqlite.org/c3ref/last_insert_rowid.html>
+lastInsertRowId :: Database -> IO Int64
+lastInsertRowId (Database db) =
+    c_sqlite3_last_insert_rowid db
+
+-- | <http://www.sqlite.org/c3ref/changes.html>
+--
+-- Return the number of rows that were changed, inserted, or deleted
+-- by the most recent @INSERT@, @DELETE@, or @UPDATE@ statement.
+changes :: Database -> IO Int
+changes (Database db) =
+    fromIntegral <$> c_sqlite3_changes db
+
+-- | <http://www.sqlite.org/c3ref/total_changes.html>
+--
+-- Return the total number of row changes caused by @INSERT@, @DELETE@,
+-- or @UPDATE@ statements since the 'Database' was opened.
+totalChanges :: Database -> IO Int
+totalChanges (Database db) =
+    fromIntegral <$> c_sqlite3_total_changes db

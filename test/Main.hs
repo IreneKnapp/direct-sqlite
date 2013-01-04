@@ -5,13 +5,15 @@ import qualified Database.SQLite3.Direct as Direct
 
 import Control.Concurrent
 import Control.Exception
-import Control.Monad        (forM_, when)
+import Control.Monad        (forM_, liftM3, when)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
+import Data.Typeable
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
 import System.IO.Error      (isDoesNotExistError, isUserError)
+import System.Timeout       (timeout)
 import Test.HUnit
 
 import qualified Data.ByteString        as B
@@ -33,6 +35,7 @@ data TestEnv =
 regressionTests :: [TestEnv -> Test]
 regressionTests =
     [ TestLabel "Exec"          . testExec
+    , TestLabel "ExecCallback"  . testExecCallback
     , TestLabel "Simple"        . testSimplest
     , TestLabel "Prepare"       . testPrepare
     , TestLabel "CloseBusy"     . testCloseBusy
@@ -44,6 +47,7 @@ regressionTests =
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
+    , TestLabel "ResultStats"   . testResultStats
     ] ++
     (if rtsSupportsBoundThreads then
     [ TestLabel "Interrupt"     . testInterrupt
@@ -103,6 +107,47 @@ testExec TestEnv{..} = TestCase $ do
       [SQLNull, SQLNull]            <- columns stmt
       Done <- step stmt
       return ()
+
+data Ex = Ex
+    deriving (Show, Typeable)
+
+instance Exception Ex
+
+testExecCallback :: TestEnv -> Test
+testExecCallback TestEnv{..} = TestCase $
+  withConn $ \conn -> do
+    chan <- newChan
+    let exec' sql = execWithCallback conn sql $ \c n v -> writeChan chan (c, n, v)
+    exec' "CREATE TABLE foo (a INT, b TEXT); \
+          \INSERT INTO foo VALUES (1, 'a'); \
+          \INSERT INTO foo VALUES (2, 'b'); \
+          \INSERT INTO foo VALUES (3, null); \
+          \INSERT INTO foo VALUES (null, 'd'); "
+
+    exec' "SELECT 1, 2, 3"
+    (3, ["1","2","3"], [Just "1", Just "2", Just "3"]) <- readChan chan
+
+    exec' "SELECT null"
+    (1, ["null"], [Nothing]) <- readChan chan
+
+    exec' "SELECT * FROM foo"
+    (2, ["a","b"], [Just "1", Just "a"]) <- readChan chan
+    (2, ["a","b"], [Just "2", Just "b"]) <- readChan chan
+    (2, ["a","b"], [Just "3", Nothing ]) <- readChan chan
+    (2, ["a","b"], [Nothing,  Just "d"]) <- readChan chan
+
+    exec' "SELECT * FROM foo WHERE a < 0; SELECT 123"
+    (1, ["123"], [Just "123"]) <- readChan chan
+
+    exec' "SELECT rowid, f.a, f.b, a || b FROM foo AS f"
+    (4, ["rowid", "a", "b", "a || b"], [Just "1", Just "1", Just "a", Just "1a"]) <- readChan chan
+    (4, ["rowid", "a", "b", "a || b"], [Just "2", Just "2", Just "b", Just "2b"]) <- readChan chan
+    (4, ["rowid", "a", "b", "a || b"], [Just "3", Just "3", Nothing , Nothing  ]) <- readChan chan
+    (4, ["rowid", "a", "b", "a || b"], [Just "4", Nothing , Just "d", Nothing  ]) <- readChan chan
+
+    Left Ex <- try $ execWithCallback conn "SELECT 1" $ \_ _ _ -> throwIO Ex
+
+    return ()
 
 -- Simplest SELECT
 testSimplest :: TestEnv -> Test
@@ -458,6 +503,35 @@ testDecodeError TestEnv{..} = TestCase $ do
   where
     invalidUtf8 = Direct.Utf8 $ B.pack [0x80]
 
+testResultStats :: TestEnv -> Test
+testResultStats TestEnv{..} = TestCase $
+  withConn $ \conn -> do
+    (0, 0, 0) <- stats conn
+    exec conn "CREATE TABLE tbl (n INTEGER PRIMARY KEY)"
+    (0, 0, 0) <- stats conn
+    exec conn "INSERT INTO tbl DEFAULT VALUES"
+    (1, 1, 1) <- stats conn
+    exec conn "INSERT INTO tbl VALUES (123)"
+    (123, 1, 2) <- stats conn
+    exec conn "INSERT INTO tbl VALUES (9223372036854775807)"
+    (maxBound, 1, 3) <- stats conn
+    exec conn "INSERT INTO tbl DEFAULT VALUES"  -- picks a rowid at random
+    (rowid, 1, 4) <- stats conn
+    True <- return $ (`notElem` [1, 123, maxBound]) rowid
+    exec conn "UPDATE tbl SET rowid=rowid+1 WHERE rowid=1 OR rowid=123"
+    (_, 2, 6) <- stats conn
+    Left SQLError{ sqlError = ErrorConstraint }
+      <- try $ exec conn "UPDATE tbl SET rowid=4"
+    (_, 1, 7) <- stats conn -- quirky behavior
+    exec conn "DELETE FROM tbl"
+    (_, 4, 11) <- stats conn
+    return ()
+  where
+    stats conn =
+      liftM3 (,,) (lastInsertRowId conn)
+                  (changes conn)
+                  (Direct.totalChanges conn)
+
 testInterrupt :: TestEnv -> Test
 testInterrupt TestEnv{..} = TestCase $
   withConn $ \conn -> do
@@ -476,6 +550,9 @@ testInterrupt TestEnv{..} = TestCase $
     _ <- forkIO $ threadDelay 100000 >> interrupt conn
     Left ErrorInterrupt <- Direct.step stmt
     Left ErrorInterrupt <- Direct.finalize stmt
+
+    Nothing <- timeout 100000 $ interruptibly conn $ exec conn tripleSum
+
     return ()
 
   where
@@ -493,6 +570,7 @@ testMultiRowInsert TestEnv{..} = TestCase $ do
         assertFailure $ show e
       Right () -> do
         -- Make sure multi-row insert actually worked
+        2 <- changes conn
         withStmt conn "SELECT * FROM foo" $ \stmt -> do
           Row <- step stmt
           [SQLInteger 1, SQLInteger 2] <- columns stmt
