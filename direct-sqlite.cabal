@@ -1,11 +1,11 @@
 name: direct-sqlite
-version: 2.3.1
+version: 2.3.2
 build-type: Simple
 license: BSD3
 license-file: LICENSE
-copyright: Copyright (c) 2012 Irene Knapp
-author: Irene Knapp <ireney.knapp@gmail.com>
-maintainer: ireney.knapp@gmail.com
+copyright: Copyright (c) 2012, 2013 Irene Knapp
+author: Irene Knapp <irene.knapp@icloud.com>
+maintainer: irene.knapp@icloud.com
 homepage: http://ireneknapp.com/software/
 bug-reports: https://github.com/IreneKnapp/direct-sqlite/issues/new
 category: Database
@@ -14,13 +14,16 @@ Cabal-version: >= 1.10
 Build-type: Simple
 description:
   This package is not very different from the other SQLite3 bindings out
-  there, but it fixes a few deficiencies I was finding.  It is not as
-  complete as bindings-sqlite3, but is slightly higher-level, in that it
-  supports marshalling of data values to and from the database.  In
-  particular, it supports strings encoded as UTF8, and BLOBs represented
-  as ByteStrings.
+  there, but it fixes a few deficiencies I was finding.  As compared to
+  bindings-sqlite3, it is slightly higher-level, in that it supports
+  marshalling of data values to and from the database.  In particular, it
+  supports strings encoded as UTF8, and BLOBs represented as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3.2] Add execPrint, execWithCallback, and interruptibly functions.
+  Add bindings for sqlite3_last_insert_rowid and sqlite3_changes.  Change the
+  Show instance of the Utf8 newtype to better match the IsString instance.
   .
   [Version 2.3.1] Upgrade the bundled SQLite3 to 3.7.15.  Add bindings for
   sqlite3_interrupt.  Export Int rather than CInt.
