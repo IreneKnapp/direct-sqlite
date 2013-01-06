@@ -49,7 +49,8 @@ regressionTests =
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
     , TestLabel "ResultStats"   . testResultStats
-    , TestLabel "Statements"    . testStatementText
+    , TestLabel "Debug"         . testStatementText
+    , TestLabel "Debug"         . testTracing
     ] ++
     (if rtsSupportsBoundThreads then
     [ TestLabel "Interrupt"     . testInterrupt
@@ -150,6 +151,43 @@ testExecCallback TestEnv{..} = TestCase $
     Left Ex <- try $ execWithCallback conn "SELECT 1" $ \_ _ _ -> throwIO Ex
 
     return ()
+
+
+testTracing :: TestEnv -> Test
+testTracing TestEnv{..} = TestCase $
+  withConn $ \conn -> do
+    chan <- newChan
+    let logger m = writeChan chan m
+    Direct.setTrace conn (Just logger)
+    withStmt conn "SELECT null" $ \stmt -> do
+      Row <- step stmt
+      res <- columns stmt
+      Done <- step stmt
+      assertEqual "tracing" [SQLNull] res
+      Direct.Utf8 msg <- readChan chan
+      assertEqual "tracing" "SELECT null" msg
+    withStmt conn "SELECT 1+?" $ \stmt -> do
+      bind stmt [SQLInteger 2]
+      Row <- step stmt
+      Done <- step stmt
+      reset stmt
+      bind stmt [SQLInteger 3]
+      Row <- step stmt
+      Done <- step stmt
+      Direct.Utf8 msg <- readChan chan
+      assertEqual "tracing" "SELECT 1+2" msg
+      Direct.Utf8 msg <- readChan chan
+      assertEqual "tracing" "SELECT 1+3" msg
+      -- Check that disabling works too
+      Direct.setTrace conn Nothing
+      reset stmt
+      bind stmt [SQLInteger 3]
+      Row <- step stmt
+      Done <- step stmt
+      writeChan chan (Direct.Utf8 "empty")
+      Direct.Utf8 msg <- readChan chan
+      assertEqual "tracing" "empty" msg
+
 
 -- Simplest SELECT
 testSimplest :: TestEnv -> Test
