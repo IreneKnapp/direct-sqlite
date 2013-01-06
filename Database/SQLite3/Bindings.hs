@@ -7,6 +7,9 @@ module Database.SQLite3.Bindings (
     c_sqlite3_close,
     c_sqlite3_errmsg,
     c_sqlite3_interrupt,
+    c_sqlite3_trace,
+    CTraceCallback,
+    mkCTraceCallback,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -21,6 +24,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_reset,
     c_sqlite3_finalize,
     c_sqlite3_clear_bindings,
+    c_sqlite3_sql,
 
     -- * Parameter and column information
     c_sqlite3_bind_parameter_count,
@@ -77,6 +81,15 @@ foreign import ccall "sqlite3_errmsg"
 foreign import ccall "sqlite3_interrupt"
     c_sqlite3_interrupt :: Ptr CDatabase -> IO ()
 
+-- | <http://www.sqlite.org/c3ref/profile.html>
+foreign import ccall "sqlite3_trace"
+    c_sqlite3_trace
+        :: Ptr CDatabase
+        -> FunPtr (CTraceCallback a) -- ^ Optional callback function called for each row
+        -> Ptr a                     -- ^ Context passed to the callback
+        -> IO (Ptr ())               -- ^ Returns context pointer from previously
+                                     --   registered trace
+
 
 foreign import ccall "sqlite3_exec"
     c_sqlite3_exec
@@ -99,6 +112,12 @@ type CExecCallback a
                     --   'c_sqlite3_exec' returns @SQLITE_ABORT@
                     --   ('ErrorAbort').
 
+type CTraceCallback a
+     = Ptr a
+    -> CString      -- ^ UTF-8 rendering of the SQL statement text as
+                    -- the statement first begins executing
+    -> IO ()
+
 -- | A couple important things to know about callbacks from Haskell code:
 --
 --  * If the callback throws an exception, apparently, the /whole program/ is
@@ -108,6 +127,9 @@ type CExecCallback a
 --    to avoid leaking memory.
 foreign import ccall "wrapper"
     mkCExecCallback :: CExecCallback a -> IO (FunPtr (CExecCallback a))
+
+foreign import ccall "wrapper"
+    mkCTraceCallback :: CTraceCallback a -> IO (FunPtr (CTraceCallback a))
 
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
@@ -153,6 +175,10 @@ foreign import ccall "sqlite3_finalize"
 -- A look at the source reveals that this function always returns @SQLITE_OK@.
 foreign import ccall unsafe "sqlite3_clear_bindings"
     c_sqlite3_clear_bindings :: Ptr CStatement -> IO CError
+
+-- | <http://www.sqlite.org/c3ref/sql.html>
+foreign import ccall unsafe "sqlite3_sql"
+    c_sqlite3_sql :: Ptr CStatement -> IO CString
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
 --
