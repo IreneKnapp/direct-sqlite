@@ -49,7 +49,7 @@ regressionTests =
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
     , TestLabel "ResultStats"   . testResultStats
-    , TestLabel "Debug"         . testStatementText
+    , TestLabel "Debug"         . testStatementSql
     , TestLabel "Debug"         . testTracing
     ] ++
     (if rtsSupportsBoundThreads then
@@ -572,11 +572,11 @@ testResultStats TestEnv{..} = TestCase $
                   (changes conn)
                   (Direct.totalChanges conn)
 
-testStatementText :: TestEnv -> Test
-testStatementText TestEnv{..} = TestCase $ do
+testStatementSql :: TestEnv -> Test
+testStatementSql TestEnv{..} = TestCase $ do
   let q1 = "SELECT 1+1"
   withStmt conn q1 $ \stmt -> do
-    Just (Direct.Utf8 sql1) <- Direct.statementText stmt
+    Just (Direct.Utf8 sql1) <- Direct.statementSql stmt
     assertEqual "statementText" (T.encodeUtf8 q1) sql1
 
 testInterrupt :: TestEnv -> Test
