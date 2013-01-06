@@ -19,6 +19,7 @@ import Test.HUnit
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Char8  as B8
 import qualified Data.Text              as T
+import qualified Data.Text.Encoding     as T
 import qualified Data.Text.IO           as T
 
 data TestEnv =
@@ -48,6 +49,7 @@ regressionTests =
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
     , TestLabel "ResultStats"   . testResultStats
+    , TestLabel "Statements"    . testStatementText
     ] ++
     (if rtsSupportsBoundThreads then
     [ TestLabel "Interrupt"     . testInterrupt
@@ -531,6 +533,13 @@ testResultStats TestEnv{..} = TestCase $
       liftM3 (,,) (lastInsertRowId conn)
                   (changes conn)
                   (Direct.totalChanges conn)
+
+testStatementText :: TestEnv -> Test
+testStatementText TestEnv{..} = TestCase $ do
+  let q1 = "SELECT 1+1"
+  withStmt conn q1 $ \stmt -> do
+    Just (Direct.Utf8 sql1) <- Direct.statementText stmt
+    assertEqual "statementText" (T.encodeUtf8 q1) sql1
 
 testInterrupt :: TestEnv -> Test
 testInterrupt TestEnv{..} = TestCase $

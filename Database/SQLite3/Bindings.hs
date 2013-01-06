@@ -21,6 +21,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_reset,
     c_sqlite3_finalize,
     c_sqlite3_clear_bindings,
+    c_sqlite3_sql,
 
     -- * Parameter and column information
     c_sqlite3_bind_parameter_count,
@@ -153,6 +154,10 @@ foreign import ccall "sqlite3_finalize"
 -- A look at the source reveals that this function always returns @SQLITE_OK@.
 foreign import ccall unsafe "sqlite3_clear_bindings"
     c_sqlite3_clear_bindings :: Ptr CStatement -> IO CError
+
+-- | <http://www.sqlite.org/c3ref/sql.html>
+foreign import ccall unsafe "sqlite3_sql"
+    c_sqlite3_sql :: Ptr CStatement -> IO CString
 
 -- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
 --

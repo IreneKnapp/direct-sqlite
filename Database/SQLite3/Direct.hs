@@ -26,6 +26,7 @@ module Database.SQLite3.Direct (
     reset,
     finalize,
     clearBindings,
+    statementText,
 
     -- * Parameter and column information
     bindParameterCount,
@@ -328,6 +329,13 @@ reset (Statement stmt) =
 finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
+
+-- | <http://www.sqlite.org/c3ref/sql.html>
+--
+-- Return a copy of the original SQL text used to compile the statement.
+statementText :: Statement -> IO (Maybe Utf8)
+statementText (Statement stmt) =
+    c_sqlite3_sql stmt >>= packUtf8 Nothing Just
 
 -- | <http://www.sqlite.org/c3ref/clear_bindings.html>
 --
