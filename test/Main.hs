@@ -577,7 +577,7 @@ testStatementSql TestEnv{..} = TestCase $ do
   let q1 = "SELECT 1+1"
   withStmt conn q1 $ \stmt -> do
     Just (Direct.Utf8 sql1) <- Direct.statementSql stmt
-    assertEqual "statementText" (T.encodeUtf8 q1) sql1
+    sql1 @=? T.encodeUtf8 q1
 
 testInterrupt :: TestEnv -> Test
 testInterrupt TestEnv{..} = TestCase $
