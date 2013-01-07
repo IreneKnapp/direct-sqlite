@@ -12,6 +12,7 @@ module Database.SQLite3.Direct (
     open,
     close,
     errmsg,
+    setTrace,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -26,6 +27,7 @@ module Database.SQLite3.Direct (
     reset,
     finalize,
     clearBindings,
+    statementSql,
 
     -- * Parameter and column information
     bindParameterCount,
@@ -284,6 +286,29 @@ type ExecCallback
     -> [Maybe Utf8]   -- ^ List of column values, as returned by 'columnText'.
     -> IO ()
 
+-- | <http://www.sqlite.org/c3ref/profile.html>
+--
+-- Enable/disable tracing of SQL execution.  Tracing can be disabled
+-- by setting 'Nothing' as the logger callback.
+--
+-- Warning: If the logger callback throws an exception, your whole
+-- program will crash.  Enable only for debugging!
+setTrace :: Database -> Maybe (Utf8 -> IO ()) -> IO ()
+setTrace (Database db) logger =
+    case logger of
+        Nothing -> do
+            _ <- c_sqlite3_trace db nullFunPtr nullPtr
+            return ()
+        Just output -> do
+            -- NB: this FunPtr never gets freed.  Shouldn't be a big deal,
+            -- though, since 'setTrace' is mainly for debugging, and is
+            -- typically only called once per application invocation.
+            cb <- mkCTraceCallback $ \_ctx cStr -> do
+                msg <- packUtf8 (Utf8 BS.empty) id cStr
+                output msg
+            _ <- c_sqlite3_trace db cb nullPtr
+            return ()
+
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
 -- If the query contains no SQL statements, this returns
@@ -328,6 +353,13 @@ reset (Statement stmt) =
 finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
+
+-- | <http://www.sqlite.org/c3ref/sql.html>
+--
+-- Return a copy of the original SQL text used to compile the statement.
+statementSql :: Statement -> IO (Maybe Utf8)
+statementSql (Statement stmt) =
+    c_sqlite3_sql stmt >>= packUtf8 Nothing Just
 
 -- | <http://www.sqlite.org/c3ref/clear_bindings.html>
 --
