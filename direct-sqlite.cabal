@@ -76,6 +76,9 @@ Library
     cpp-options: -Ddirect_sqlite_systemlib
     extra-libraries: sqlite3
   } else {
+    if !os(windows) {
+      extra-libraries: pthread
+    }
     c-sources: cbits/sqlite3.c
   }
 
