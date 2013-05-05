@@ -30,6 +30,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_bind_parameter_count,
     c_sqlite3_bind_parameter_name,
     c_sqlite3_column_count,
+    c_sqlite3_column_name,
 
     -- * Binding Values To Prepared Statements
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
@@ -195,6 +196,10 @@ foreign import ccall unsafe "sqlite3_bind_parameter_name"
 -- | <http://www.sqlite.org/c3ref/column_count.html>
 foreign import ccall unsafe "sqlite3_column_count"
     c_sqlite3_column_count :: Ptr CStatement -> IO CColumnCount
+
+-- | <http://www.sqlite.org/c3ref/column_name.html>
+foreign import ccall unsafe "sqlite3_column_name"
+    c_sqlite3_column_name :: Ptr CStatement -> CColumnIndex -> IO CString
 
 
 foreign import ccall unsafe "sqlite3_bind_blob"

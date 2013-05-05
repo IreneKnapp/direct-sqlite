@@ -33,6 +33,7 @@ module Database.SQLite3.Direct (
     bindParameterCount,
     bindParameterName,
     columnCount,
+    columnName,
 
     -- * Binding values to a prepared statement
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
@@ -390,6 +391,12 @@ bindParameterName (Statement stmt) idx =
 columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
     fromFFI <$> c_sqlite3_column_count stmt
+
+-- | <http://www.sqlite.org/c3ref/column_name.html>
+columnName :: Statement -> ColumnIndex -> IO (Maybe Utf8)
+columnName (Statement stmt) idx =
+    c_sqlite3_column_name stmt (toFFI idx) >>=
+        packUtf8 Nothing Just
 
 bindInt64 :: Statement -> ParamIndex -> Int64 -> IO (Either Error ())
 bindInt64 (Statement stmt) idx value =
