@@ -25,6 +25,7 @@ module Database.SQLite3 (
     bindParameterCount,
     bindParameterName,
     columnCount,
+    columnName,
 
     -- * Binding values to a prepared statement
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
@@ -381,6 +382,30 @@ bindParameterName stmt idx = do
         Just name -> Just <$> fromUtf8 desc name
   where
     desc = "Database.SQLite3.bindParameterName: Invalid UTF-8"
+
+-- | <http://www.sqlite.org/c3ref/column_name.html>
+--
+-- Return the name of a result column.  If the column index is out of range,
+-- return 'Nothing'.
+columnName :: Statement -> ColumnIndex -> IO (Maybe Text)
+columnName stmt idx = do
+    m <- Direct.columnName stmt idx
+    case m of
+        Just name -> Just <$> fromUtf8 desc name
+        Nothing -> do
+            -- sqlite3_column_name only returns NULL if memory allocation fails
+            -- or if the column index is out of range.
+            count <- Direct.columnCount stmt
+            if idx >= 0 && idx < count
+                then throwIO outOfMemory
+                else return Nothing
+  where
+    desc = "Database.SQLite3.columnName: Invalid UTF-8"
+    outOfMemory = SQLError
+        { sqlError        = ErrorNoMemory
+        , sqlErrorDetails = "out of memory (sqlite3_column_name returned NULL)"
+        , sqlErrorContext = "column name"
+        }
 
 bindBlob :: Statement -> ParamIndex -> ByteString -> IO ()
 bindBlob statement parameterIndex byteString =

@@ -45,6 +45,7 @@ regressionTests =
     , TestLabel "Params"        . testBindParamName
     , TestLabel "Params"        . testBindErrorValidation
     , TestLabel "Columns"       . testColumns
+    , TestLabel "ColumnName"    . testColumnName
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
@@ -353,6 +354,46 @@ testColumns TestEnv{..} = TestCase $ do
       0 <- columnCount stmt
       Done <- step stmt
       0 <- columnCount stmt
+      return ()
+
+testColumnName :: TestEnv -> Test
+testColumnName TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE foo (id INTEGER PRIMARY KEY, abc TEXT, \"123\" REAL, über INT)"
+    exec conn "INSERT INTO foo (abc, \"123\", über) VALUES ('hello', 3.14, 456)"
+
+    withStmt conn "SELECT id AS id, abc AS x, \"123\" AS y, über AS ü FROM foo"
+      $ \stmt -> do
+      let checkNames = do
+              4 <- columnCount stmt
+              Nothing   <- columnName stmt (-1)
+              Just "id" <- columnName stmt 0
+              Just "x"  <- columnName stmt 1
+              Just "y"  <- columnName stmt 2
+              Just "ü"  <- columnName stmt 3
+              Nothing   <- columnName stmt 4
+              Nothing   <- columnName stmt (ColumnIndex minBound)
+              Nothing   <- columnName stmt (ColumnIndex maxBound)
+              return ()
+      checkNames
+      Row <- step stmt
+      checkNames
+      [SQLInteger 1, SQLText "hello", SQLFloat 3.14, SQLInteger 456] <- columns stmt
+      Done <- step stmt
+      checkNames
+
+    -- Column names without AS clauses may change in future versions of SQLite.
+    -- This test will fail if they do.
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      4 <- columnCount stmt
+      Nothing     <- columnName stmt (-1)
+      Just "id"   <- columnName stmt 0
+      Just "abc"  <- columnName stmt 1
+      Just "123"  <- columnName stmt 2
+      Just "über" <- columnName stmt 3
+      Nothing     <- columnName stmt 4
+      Nothing     <- columnName stmt (ColumnIndex minBound)
+      Nothing     <- columnName stmt (ColumnIndex maxBound)
       return ()
 
 -- Testing for specific error codes:
