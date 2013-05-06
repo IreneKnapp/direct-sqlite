@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3.3.1
+version: 2.3.4
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -20,6 +20,9 @@ description:
   supports strings encoded as UTF8, and BLOBs represented as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3.4] Work around a linker error on some systems; add
+  column-name reporting.
   .
   [Version 2.3.3.1] Upgrade bundled SQLite3 to 3.7.15.2.
   .
