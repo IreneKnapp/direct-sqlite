@@ -13,6 +13,7 @@ module Database.SQLite3.Direct (
     close,
     errmsg,
     setTrace,
+    getAutoCommit,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -309,6 +310,24 @@ setTrace (Database db) logger =
                 output msg
             _ <- c_sqlite3_trace db cb nullPtr
             return ()
+
+-- | <http://www.sqlite.org/c3ref/get_autocommit.html>
+--
+-- Return 'True' if the connection is in autocommit mode, or 'False' if a
+-- transaction started with @BEGIN@ is still active.
+--
+-- Be warned that some errors roll back the transaction automatically,
+-- and that @ROLLBACK@ will throw an error if no transaction is active.
+-- Use 'getAutoCommit' to avoid such an error:
+--
+-- @
+--  autocommit <- 'getAutoCommit' conn
+--  'Control.Monad.when' (not autocommit) $
+--      'Database.SQLite3.exec' conn \"ROLLBACK\"
+-- @
+getAutoCommit :: Database -> IO Bool
+getAutoCommit (Database db) =
+    (/= 0) <$> c_sqlite3_get_autocommit db
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
