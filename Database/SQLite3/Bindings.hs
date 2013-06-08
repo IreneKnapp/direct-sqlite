@@ -10,6 +10,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_trace,
     CTraceCallback,
     mkCTraceCallback,
+    c_sqlite3_get_autocommit,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -90,6 +91,10 @@ foreign import ccall "sqlite3_trace"
         -> Ptr a                     -- ^ Context passed to the callback
         -> IO (Ptr ())               -- ^ Returns context pointer from previously
                                      --   registered trace
+
+-- | <http://www.sqlite.org/c3ref/get_autocommit.html>
+foreign import ccall unsafe "sqlite3_get_autocommit"
+    c_sqlite3_get_autocommit :: Ptr CDatabase -> IO CInt
 
 
 foreign import ccall "sqlite3_exec"
