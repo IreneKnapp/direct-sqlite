@@ -50,6 +50,7 @@ regressionTests =
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
     , TestLabel "ResultStats"   . testResultStats
+    , TestLabel "GetAutoCommit" . testGetAutoCommit
     , TestLabel "Debug"         . testStatementSql
     , TestLabel "Debug"         . testTracing
     ] ++
@@ -612,6 +613,29 @@ testResultStats TestEnv{..} = TestCase $
       liftM3 (,,) (lastInsertRowId conn)
                   (changes conn)
                   (Direct.totalChanges conn)
+
+testGetAutoCommit :: TestEnv -> Test
+testGetAutoCommit TestEnv{..} = TestCase $
+  withConn $ \conn -> do
+    True <- Direct.getAutoCommit conn
+    exec conn "BEGIN"
+    False <- Direct.getAutoCommit conn
+    Left (ErrorError, _) <- Direct.exec conn "BEGIN"
+    False <- Direct.getAutoCommit conn
+
+    exec conn "ROLLBACK"
+    True <- Direct.getAutoCommit conn
+    Left (ErrorError, _) <- Direct.exec conn "ROLLBACK"
+    True <- Direct.getAutoCommit conn
+
+    exec conn "BEGIN"
+    False <- Direct.getAutoCommit conn
+    Left (ErrorFull, _) <- Direct.exec conn
+        "PRAGMA max_page_count=1; CREATE TABLE foo (a INT)"
+    True <- Direct.getAutoCommit conn
+    Left (ErrorError, _) <- Direct.exec conn "ROLLBACK"
+
+    return ()
 
 testStatementSql :: TestEnv -> Test
 testStatementSql TestEnv{..} = TestCase $ do
