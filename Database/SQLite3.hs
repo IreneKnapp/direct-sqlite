@@ -16,6 +16,7 @@ module Database.SQLite3 (
 
     -- * Statement management
     prepare,
+    prepareUtf8,
     step,
     reset,
     finalize,
@@ -45,6 +46,7 @@ module Database.SQLite3 (
     -- datum contains invalid UTF-8.
     column,
     columns,
+    typedColumns,
     columnType,
     columnInt64,
     columnDouble,
@@ -110,7 +112,7 @@ import qualified Data.Text.IO as T
 import Control.Applicative  ((<$>))
 import Control.Concurrent
 import Control.Exception
-import Control.Monad        (when, zipWithM_)
+import Control.Monad        (when, zipWithM, zipWithM_)
 import Data.ByteString      (ByteString)
 import Data.Int             (Int64)
 import Data.Maybe           (fromMaybe)
@@ -294,7 +296,7 @@ execWithCallback db sql cb =
     cb' count namesUtf8 =
        let names = map fromUtf8'' namesUtf8
            {-# NOINLINE names #-}
-        in \valuesUtf8 -> cb count names (map (fmap fromUtf8'') valuesUtf8)
+        in cb count names . map (fmap fromUtf8'')
 
     fromUtf8'' = fromUtf8' "Database.SQLite3.execWithCallback: Invalid UTF-8"
 
@@ -314,8 +316,17 @@ type ExecCallback
 --
 -- If the query string contains no SQL statements, this 'fail's.
 prepare :: Database -> Text -> IO Statement
-prepare db sql = do
-    m <- Direct.prepare db (toUtf8 sql)
+prepare db sql = prepareUtf8 db (toUtf8 sql)
+        
+-- | <http://www.sqlite.org/c3ref/prepare.html>
+--
+-- It can help to avoid redundant Utf8 to Text conversion if you already
+-- have Utf8 
+--
+-- If the query string contains no SQL statements, this 'fail's.
+prepareUtf8 :: Database -> Utf8 -> IO Statement
+prepareUtf8 db sql = do
+    m <- Direct.prepare db sql
             >>= checkError (DetailDatabase db) ("prepare " `appendShow` sql)
     case m of
         Nothing   -> fail "Direct.SQLite3.prepare: empty query string"
@@ -483,14 +494,28 @@ columnText statement columnIndex =
 column :: Statement -> ColumnIndex -> IO SQLData
 column statement idx = do
     theType <- columnType statement idx
-    case theType of
-        IntegerColumn -> SQLInteger <$> columnInt64  statement idx
-        FloatColumn   -> SQLFloat   <$> columnDouble statement idx
-        TextColumn    -> SQLText    <$> columnText   statement idx
-        BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
-        NullColumn    -> return SQLNull
+    typedColumn theType statement idx
 
 columns :: Statement -> IO [SQLData]
 columns statement = do
     count <- columnCount statement
     mapM (column statement) [0..count-1]
+
+typedColumn :: ColumnType -> Statement -> ColumnIndex -> IO SQLData
+typedColumn theType statement idx = case theType of
+    IntegerColumn -> SQLInteger <$> columnInt64  statement idx
+    FloatColumn   -> SQLFloat   <$> columnDouble statement idx
+    TextColumn    -> SQLText    <$> columnText   statement idx
+    BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
+    NullColumn    -> return SQLNull
+
+-- |
+-- This avoids extra API calls using the list of column types.
+-- If passed types do not correspond to the actual types, the values will be 
+-- converted according to the rules at <http://www.sqlite.org/c3ref/column_blob.html>.
+-- If the list contains more items that number of columns, the result is undefined.
+typedColumns :: Statement -> [Maybe ColumnType] -> IO [SQLData]
+typedColumns statement = zipWithM f [0..] where
+    f idx theType = case theType of
+        Nothing -> column statement idx
+        Just t  -> typedColumn t statement idx
