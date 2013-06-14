@@ -509,6 +509,11 @@ typedColumn theType statement idx = case theType of
     BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
     NullColumn    -> return SQLNull
 
+-- |
+-- This avoids extra API calls using the list of column types.
+-- If passed types do not correspond to the actual types, the values will be 
+-- converted according to the rules at <http://www.sqlite.org/c3ref/column_blob.html>.
+-- If the list contains more items that number of columns, the result is undefined.
 typedColumns :: Statement -> [Maybe ColumnType] -> IO [SQLData]
 typedColumns statement = zipWithM f [0..] where
     f idx theType = case theType of
