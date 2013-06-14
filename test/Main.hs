@@ -45,6 +45,7 @@ regressionTests =
     , TestLabel "Params"        . testBindParamName
     , TestLabel "Params"        . testBindErrorValidation
     , TestLabel "Columns"       . testColumns
+    , TestLabel "TypedColumns"  . testTypedColumns
     , TestLabel "ColumnName"    . testColumnName
     , TestLabel "Errors"        . testErrors
     , TestLabel "Integrity"     . testIntegrity
@@ -349,6 +350,39 @@ testColumns TestEnv{..} = TestCase $ do
       Row <- step stmt
       4 <- columnCount stmt -- That's better.
       [SQLInteger 1, SQLInteger 2, SQLNull, SQLInteger 42] <- columns stmt
+      return ()
+  where
+    command stmt = do
+      0 <- columnCount stmt
+      Done <- step stmt
+      0 <- columnCount stmt
+      return ()
+
+testTypedColumns :: TestEnv -> Test
+testTypedColumns TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    withStmt conn "CREATE TABLE foo (a INT, b INT)" command
+    withStmt conn "INSERT INTO foo VALUES (1, 2)" command
+    withStmt conn "INSERT INTO foo VALUES (3, 4)" command
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 1, SQLInteger 2] <- typedColumns stmt [Nothing, Nothing]
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 3, SQLInteger 4] <- typedColumns stmt [Just IntegerColumn, Just IntegerColumn]
+      Done <- step stmt
+      2 <- columnCount stmt
+      return ()
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLText "1", SQLText "2"] <- typedColumns stmt [Just TextColumn, Just TextColumn]
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLFloat 3.0, SQLFloat 4.0] <- typedColumns stmt [Just FloatColumn, Just FloatColumn]
+      Done <- step stmt
+      2 <- columnCount stmt
       return ()
   where
     command stmt = do
