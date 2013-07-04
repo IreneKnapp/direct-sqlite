@@ -1,0 +1,28 @@
+data XmlFileInfo = XmlFileInfo
+    { xfName :: Text
+    , xfId   :: Text
+    , xfTitle:: Text
+    , xfContents :: Text
+    , xfKeywords :: Text
+    }
+
+-- Create a bunch of XMLFileInfo in a list, then:
+
+--create virtual table and prepare insertion statement
+--using porter tokenization to allow for word morphology
+withDB :: [XmlFileInfo] -> Database -> IO ()
+withDB xfs db = do
+    exec db "CREATE VIRTUAL TABLE pages USING fts4(file, id, title, body, keywords, tokenize=porter)"
+    bracket
+        (prepare db "INSERT INTO pages VALUES(?, ?, ?, ?, ?)")
+        finalize
+        (withStmt xfs)
+
+-- Then to query we do:
+
+prepareQuery db = prepare db "SELECT file,id,title,snippet(pages, '<b>', '</b>', '<b>...</b>', 3),matchinfo(pages) from pages WHERE pages MATCH ?"
+
+-- Then we run that query with the (sanitized) user-supplied
+-- search string as the query. We apply a ranking algorithm to the
+-- match info that comes back and display the results. But for testing,
+-- you can just try the query on some strings and boolean expressions.
