@@ -21,6 +21,8 @@ description:
   .
   Release history:
   .
+  [Version 2.3.5] Add support to compile bundled SQLite3 with full-text search.
+  .
   [Version 2.3.4] Work around a linker error on some systems; add
   column-name reporting.
   .
@@ -68,6 +70,10 @@ flag systemlib
   description: Use the system-wide sqlite library
   default: False
 
+flag fulltextsearch
+  description: Enable full-text search when using the bundled sqlite library
+  default: True
+
 Library
   exposed-modules:
     Database.SQLite3
@@ -78,11 +84,17 @@ Library
   if flag(systemlib) {
     cpp-options: -Ddirect_sqlite_systemlib
     extra-libraries: sqlite3
+    if flag(fulltextsearch) {
+      buildable: False
+    }
   } else {
     if !os(windows) {
       extra-libraries: pthread
     }
     c-sources: cbits/sqlite3.c
+    if flag(fulltextsearch) {
+      ghc-options: -optc-DSQLITE_ENABLE_FTS4
+    }
   }
 
   include-dirs: .
