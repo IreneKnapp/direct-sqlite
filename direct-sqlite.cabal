@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3.4
+version: 2.3.5
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -21,7 +21,7 @@ description:
   .
   Release history:
   .
-  [Version 2.3.5] Add support to compile bundled SQLite3 with full-text search.
+  [Version 2.3.5] Add support to compile bundled SQLite3 with full-text search.  Upgrade bundled SQLite3 to 3.7.17.
   .
   [Version 2.3.4] Work around a linker error on some systems; add
   column-name reporting.
@@ -93,7 +93,9 @@ Library
     }
     c-sources: cbits/sqlite3.c
     if flag(fulltextsearch) {
-      ghc-options: -optc-DSQLITE_ENABLE_FTS4
+      cc-options: -DSQLITE_ENABLE_FTS3
+                  -DSQLITE_ENABLE_FTS3_PARENTHESIS
+                  -DSQLITE_ENABLE_FTS4
     }
   }
 
