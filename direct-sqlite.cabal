@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3.5
+version: 2.3.6
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -20,6 +20,9 @@ description:
   supports strings encoded as UTF8, and BLOBs represented as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3.6] Re-apply the stat64 hack after upgrade to the bundled
+  SQLite3.  Oops!
   .
   [Version 2.3.5] Add support to compile bundled SQLite3 with full-text search.  Upgrade bundled SQLite3 to 3.7.17.
   .
