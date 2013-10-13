@@ -407,8 +407,8 @@ testColumnName TestEnv{..} = TestCase $ do
               Just "y"  <- columnName stmt 2
               Just "ü"  <- columnName stmt 3
               Nothing   <- columnName stmt 4
-              Nothing   <- columnName stmt (ColumnIndex minBound)
-              Nothing   <- columnName stmt (ColumnIndex maxBound)
+              Nothing   <- columnName stmt minBound
+              Nothing   <- columnName stmt maxBound
               return ()
       checkNames
       Row <- step stmt
@@ -427,8 +427,8 @@ testColumnName TestEnv{..} = TestCase $ do
       Just "123"  <- columnName stmt 2
       Just "über" <- columnName stmt 3
       Nothing     <- columnName stmt 4
-      Nothing     <- columnName stmt (ColumnIndex minBound)
-      Nothing     <- columnName stmt (ColumnIndex maxBound)
+      Nothing     <- columnName stmt minBound
+      Nothing     <- columnName stmt maxBound
       return ()
 
 -- Testing for specific error codes:

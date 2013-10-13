@@ -124,6 +124,11 @@ newtype ParamIndex = ParamIndex Int
 instance Show ParamIndex where
     show (ParamIndex n) = show n
 
+-- | Limit min/max bounds to fit into SQLite's native parameter ranges.
+instance Bounded ParamIndex where
+    minBound = ParamIndex (fromIntegral (minBound :: CInt))
+    maxBound = ParamIndex (fromIntegral (maxBound :: CInt))
+
 -- | Index of a column in a result set.  Column indices start from 0.
 newtype ColumnIndex = ColumnIndex Int
     deriving (Eq, Ord, Enum, Num, Real, Integral)
@@ -131,6 +136,11 @@ newtype ColumnIndex = ColumnIndex Int
 -- | This just shows the underlying integer, without the data constructor.
 instance Show ColumnIndex where
     show (ColumnIndex n) = show n
+
+-- | Limit min/max bounds to fit into SQLite's native parameter ranges.
+instance Bounded ColumnIndex where
+    minBound = ColumnIndex (fromIntegral (minBound :: CInt))
+    maxBound = ColumnIndex (fromIntegral (maxBound :: CInt))
 
 -- | Number of columns in a result set.
 type ColumnCount = ColumnIndex
