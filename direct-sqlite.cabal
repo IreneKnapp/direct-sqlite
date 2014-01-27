@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3.9
+version: 2.3.10
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -20,6 +20,8 @@ description:
   supports strings encoded as UTF8, and BLOBs represented as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3.10] Add support for compiling the bundled SQLite3 with URI filename support. Specifying flags that would have affected the bundled SQLite3 no longer causes build failure if the "systemlib" flag is specified.
   .
   [Version 2.3.9] Update bounds on the requirement on the "text" library.
   .
@@ -83,6 +85,10 @@ flag fulltextsearch
   description: Enable full-text search when using the bundled sqlite library
   default: True
 
+flag urifilenames
+  description: Enable URI filenames when using the bundled sqlite library
+  default: True
+
 Library
   exposed-modules:
     Database.SQLite3
@@ -93,18 +99,25 @@ Library
   if flag(systemlib) {
     cpp-options: -Ddirect_sqlite_systemlib
     extra-libraries: sqlite3
-    if flag(fulltextsearch) {
-      buildable: False
-    }
   } else {
     if !os(windows) {
       extra-libraries: pthread
     }
     c-sources: cbits/sqlite3.c
-    if flag(fulltextsearch) {
+    if flag(fulltextsearch) && flag(urifilenames) {
       cc-options: -DSQLITE_ENABLE_FTS3
                   -DSQLITE_ENABLE_FTS3_PARENTHESIS
                   -DSQLITE_ENABLE_FTS4
+                  -DSQLITE_USE_URI
+    } else {
+      if flag(fulltextsearch) {
+        cc-options: -DSQLITE_ENABLE_FTS3
+                    -DSQLITE_ENABLE_FTS3_PARENTHESIS
+                    -DSQLITE_ENABLE_FTS4
+      }
+      if flag(urifilenames) {
+        cc-options: -DSQLITE_USE_URI
+      }
     }
   }
 
