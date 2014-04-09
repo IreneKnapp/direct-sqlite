@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3.11
+version: 2.3.12
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -20,6 +20,8 @@ description:
   supports strings encoded as UTF8, and BLOBs represented as ByteStrings.
   .
   Release history:
+  .
+  [Version 2.3.12] Upgrade bundled SQLite3 to 3.8.4.1.
   .
   [Version 2.3.11] Add support for URI filenames, and default to having them on. Among other things, this enables using in-memory databases.
   .
