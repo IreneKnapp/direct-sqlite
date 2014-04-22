@@ -33,6 +33,7 @@ module Database.SQLite3.Direct (
     -- * Parameter and column information
     bindParameterCount,
     bindParameterName,
+    bindParameterIndex,
     columnCount,
     columnName,
 
@@ -405,6 +406,13 @@ bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
 bindParameterName (Statement stmt) idx =
     c_sqlite3_bind_parameter_name stmt (toFFI idx) >>=
         packUtf8 Nothing Just
+
+-- | <http://www.sqlite.org/c3ref/bind_parameter_index.html>
+bindParameterIndex :: Statement -> Utf8 -> IO (Maybe ParamIndex)
+bindParameterIndex (Statement stmt) (Utf8 name) =
+    BS.useAsCString name $ \name' -> do
+        idx <- fromFFI <$> c_sqlite3_bind_parameter_index stmt name'
+        return $ if idx == 0 then Nothing else Just idx
 
 -- | <http://www.sqlite.org/c3ref/column_count.html>
 columnCount :: Statement -> IO ColumnCount

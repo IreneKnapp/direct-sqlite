@@ -30,6 +30,7 @@ module Database.SQLite3.Bindings (
     -- * Parameter and column information
     c_sqlite3_bind_parameter_count,
     c_sqlite3_bind_parameter_name,
+    c_sqlite3_bind_parameter_index,
     c_sqlite3_column_count,
     c_sqlite3_column_name,
 
@@ -197,6 +198,10 @@ foreign import ccall unsafe "sqlite3_bind_parameter_count"
 -- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
 foreign import ccall unsafe "sqlite3_bind_parameter_name"
     c_sqlite3_bind_parameter_name :: Ptr CStatement -> CParamIndex -> IO CString
+
+-- | <http://www.sqlite.org/c3ref/bind_parameter_index.html>
+foreign import ccall unsafe "sqlite3_bind_parameter_index"
+    c_sqlite3_bind_parameter_index :: Ptr CStatement -> CString -> IO CParamIndex
 
 -- | <http://www.sqlite.org/c3ref/column_count.html>
 foreign import ccall unsafe "sqlite3_column_count"
