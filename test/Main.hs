@@ -44,6 +44,7 @@ regressionTests =
     , TestLabel "Params"        . testBindParamCounts
     , TestLabel "Params"        . testBindParamName
     , TestLabel "Params"        . testBindErrorValidation
+    , TestLabel "Params"        . testNamedBindParams
     , TestLabel "Columns"       . testColumns
     , TestLabel "TypedColumns"  . testTypedColumns
     , TestLabel "ColumnName"    . testColumnName
@@ -302,6 +303,39 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
     -- Invalid use, one param in q string, 2 given
     testException2 stmt = bind stmt [SQLInteger 1, SQLInteger 2]
 
+testNamedBindParams :: TestEnv -> Test
+testNamedBindParams TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    withStmt conn "SELECT :foo / :bar" $ \stmt -> do
+      -- Test that we get something back for known names
+      Just fooIdx <- Direct.bindParameterIndex stmt ":foo"
+      Just barIdx <- Direct.bindParameterIndex stmt ":bar"
+      -- Test that we get Nothing back for unknown names
+      Nothing <- Direct.bindParameterIndex stmt "intentionally_undefined"
+      Right () <- Direct.bindInt64 stmt fooIdx 4
+      Right () <- Direct.bindInt64 stmt barIdx 2
+      Row <- step stmt
+      1 <- columnCount stmt
+      [SQLInteger 2] <- columns stmt
+      Done <- step stmt
+      return ()
+    withStmt conn "SELECT @n1+@n2" $ \stmt -> do
+      -- Test that we get something back for known names
+      Just _n1 <- Direct.bindParameterIndex stmt "@n1"
+      Just _n2 <- Direct.bindParameterIndex stmt "@n2"
+      -- Here's where things get confusing..  You can't mix different
+      -- types of :/$/@ parameter conventions.
+      Nothing <- Direct.bindParameterIndex stmt ":n1"
+      Nothing <- Direct.bindParameterIndex stmt ":n2"
+      return ()
+    withStmt conn "SELECT :foo / :bar,:t" $ \stmt -> do
+      bindNamed stmt [(":t", SQLText "txt"), (":foo", SQLInteger 6), (":bar", SQLInteger 2)]
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 3, SQLText "txt"] <- columns stmt
+      Done <- step stmt
+      return ()
+
 testColumns :: TestEnv -> Test
 testColumns TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
@@ -477,6 +511,13 @@ testErrors TestEnv{..} = TestCase $ do
         expectError ErrorRange $ bindSQLData stmt i SQLNull
       bind stmt []  -- This should succeed.  Don't whine that there aren't any
                     -- parameters to bind!
+      Row <- step stmt
+      SQLInteger 1 <- column stmt 0
+      return ()
+
+    withStmt conn "SELECT :bar" $ \stmt -> do
+      shouldFail $ bindNamed stmt [(":missing", SQLInteger 42)]
+      bindNamed stmt [(":bar", SQLInteger 1)]
       Row <- step stmt
       SQLInteger 1 <- column stmt 0
       return ()
