@@ -32,6 +32,7 @@ module Database.SQLite3 (
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
     bindSQLData,
     bind,
+    bindNamed,
     bindInt,
     bindInt64,
     bindDouble,
@@ -481,6 +482,30 @@ bind statement sqlData = do
         fail ("mismatched parameter count for bind.  Prepared statement "++
               "needs "++ show nParams ++ ", " ++ show (length sqlData) ++" given")
     zipWithM_ (bindSQLData statement) [1..] sqlData
+
+-- | Convenience function for binding named values to all parameters.
+-- This will 'fail' if the list has the wrong number of parameters or
+-- if an unknown name is used.
+--
+-- Example:
+-- >> stmt <- prepare conn "SELECT :foo + :bar"
+-- >> bindNamed stmt [(":foo", SQLInteger 1), (":bar", SQLInteger 2)]
+bindNamed :: Statement -> [(T.Text, SQLData)] -> IO ()
+bindNamed statement params = do
+    ParamIndex nParams <- bindParameterCount statement
+    when (nParams /= length params) $
+        fail ("mismatched parameter count for bind.  Prepared statement "++
+              "needs "++ show nParams ++ ", " ++ show (length params) ++" given")
+    mapM_ bindIdx params
+    where
+        bindIdx (name, val) = do
+            idx <- Direct.bindParameterIndex statement $ toUtf8 name
+            case idx of
+                Just i ->
+                    bindSQLData statement i val
+                Nothing ->
+                    fail ("unknown named parameter "++show name)
+
 
 -- |
 -- This will throw a 'DecodeError' if the datum contains invalid UTF-8.

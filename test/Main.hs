@@ -328,6 +328,13 @@ testNamedBindParams TestEnv{..} = TestCase $ do
       Nothing <- Direct.bindParameterIndex stmt ":n1"
       Nothing <- Direct.bindParameterIndex stmt ":n2"
       return ()
+    withStmt conn "SELECT :foo / :bar,:t" $ \stmt -> do
+      bindNamed stmt [(":t", SQLText "txt"), (":foo", SQLInteger 6), (":bar", SQLInteger 2)]
+      Row <- step stmt
+      2 <- columnCount stmt
+      [SQLInteger 3, SQLText "txt"] <- columns stmt
+      Done <- step stmt
+      return ()
 
 testColumns :: TestEnv -> Test
 testColumns TestEnv{..} = TestCase $ do
@@ -504,6 +511,13 @@ testErrors TestEnv{..} = TestCase $ do
         expectError ErrorRange $ bindSQLData stmt i SQLNull
       bind stmt []  -- This should succeed.  Don't whine that there aren't any
                     -- parameters to bind!
+      Row <- step stmt
+      SQLInteger 1 <- column stmt 0
+      return ()
+
+    withStmt conn "SELECT :bar" $ \stmt -> do
+      shouldFail $ bindNamed stmt [(":missing", SQLInteger 42)]
+      bindNamed stmt [(":bar", SQLInteger 1)]
       Row <- step stmt
       SQLInteger 1 <- column stmt 0
       return ()
