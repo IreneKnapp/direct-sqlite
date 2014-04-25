@@ -488,8 +488,11 @@ bind statement sqlData = do
 -- if an unknown name is used.
 --
 -- Example:
--- >> stmt <- prepare conn "SELECT :foo + :bar"
--- >> bindNamed stmt [(":foo", SQLInteger 1), (":bar", SQLInteger 2)]
+--
+-- @
+-- stmt <- prepare conn \"SELECT :foo + :bar\"
+-- bindNamed stmt [(\":foo\", SQLInteger 1), (\":bar\", SQLInteger 2)]
+-- @
 bindNamed :: Statement -> [(T.Text, SQLData)] -> IO ()
 bindNamed statement params = do
     ParamIndex nParams <- bindParameterCount statement
