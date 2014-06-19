@@ -287,4 +287,4 @@ foreign import ccall "sqlite3_free"
 
 -- | <http://sqlite.org/c3ref/enable_load_extension.html>
 foreign import ccall "sqlite3_enable_load_extension"
-    c_sqlite3_enable_load_extension :: Ptr CDatabase -> Bool -> IO Int
+    c_sqlite3_enable_load_extension :: Ptr CDatabase -> Bool -> IO CError

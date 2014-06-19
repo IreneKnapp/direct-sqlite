@@ -500,10 +500,10 @@ totalChanges :: Database -> IO Int
 totalChanges (Database db) =
     fromIntegral <$> c_sqlite3_total_changes db
 
-enableLoadExtension :: Database -> IO Int
+enableLoadExtension :: Database -> IO (Either Error ())
 enableLoadExtension (Database db) = do
-    fromIntegral <$> c_sqlite3_enable_load_extension db True
+    toResult () <$> c_sqlite3_enable_load_extension db True
 
-disableLoadExtension :: Database -> IO Int
+disableLoadExtension :: Database -> IO (Either Error ())
 disableLoadExtension (Database db) = do
-    fromIntegral <$> c_sqlite3_enable_load_extension db False
+    toResult () <$> c_sqlite3_enable_load_extension db False
