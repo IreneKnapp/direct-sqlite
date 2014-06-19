@@ -58,6 +58,9 @@ module Database.SQLite3.Bindings (
 
     -- * Miscellaneous
     c_sqlite3_free,
+
+    -- * Extensions
+    c_sqlite3_enable_load_extension
 ) where
 
 import Database.SQLite3.Bindings.Types
@@ -280,3 +283,8 @@ foreign import ccall unsafe "sqlite3_total_changes"
 -- | <http://sqlite.org/c3ref/free.html>
 foreign import ccall "sqlite3_free"
     c_sqlite3_free :: Ptr a -> IO ()
+
+
+-- | <http://sqlite.org/c3ref/enable_load_extension.html>
+foreign import ccall "sqlite3_enable_load_extension"
+    c_sqlite3_enable_load_extension :: Ptr CDatabase -> Bool -> IO Int
