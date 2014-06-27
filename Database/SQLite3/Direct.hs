@@ -53,6 +53,11 @@ module Database.SQLite3.Direct (
     columnText,
     columnBlob,
 
+    -- * control loading of extensions
+    enableLoadExtension,
+    disableLoadExtension,
+
+
     -- * Result statistics
     lastInsertRowId,
     changes,
@@ -494,3 +499,11 @@ changes (Database db) =
 totalChanges :: Database -> IO Int
 totalChanges (Database db) =
     fromIntegral <$> c_sqlite3_total_changes db
+
+enableLoadExtension :: Database -> IO (Either Error ())
+enableLoadExtension (Database db) = do
+    toResult () <$> c_sqlite3_enable_load_extension db True
+
+disableLoadExtension :: Database -> IO (Either Error ())
+disableLoadExtension (Database db) = do
+    toResult () <$> c_sqlite3_enable_load_extension db False
