@@ -1,3 +1,6 @@
+v2.3.14
+	* Allow text-1.2
+
 v2.3.13
     * Add support for named parameters to queries.  Split this changelog into
       a separate file (preserving its history).
