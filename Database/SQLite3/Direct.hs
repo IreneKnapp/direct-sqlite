@@ -57,11 +57,27 @@ module Database.SQLite3.Direct (
     enableLoadExtension,
     disableLoadExtension,
 
-
     -- * Result statistics
     lastInsertRowId,
     changes,
     totalChanges,
+
+    -- * Create custom SQL functions
+    createFunction,
+    deleteFunction,
+    -- ** Extract function arguments
+    funcArgCount,
+    funcArgType,
+    funcArgInt64,
+    funcArgDouble,
+    funcArgText,
+    funcArgBlob,
+    -- ** Set the result of a function
+    funcResultInt64,
+    funcResultDouble,
+    funcResultText,
+    funcResultBlob,
+    funcResultNull,
 
     -- * Interrupting a long-running query
     interrupt,
@@ -70,6 +86,8 @@ module Database.SQLite3.Direct (
     Database(..),
     Statement(..),
     ColumnType(..),
+    FuncContext(..),
+    FuncArgs(..),
 
     -- ** Results and errors
     StepResult(..),
@@ -80,6 +98,8 @@ module Database.SQLite3.Direct (
     ParamIndex(..),
     ColumnIndex(..),
     ColumnCount,
+    ArgCount(..),
+    ArgIndex,
 ) where
 
 import Database.SQLite3.Bindings
@@ -90,7 +110,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
 import Control.Exception as E
-import Control.Monad        (join)
+import Control.Monad        (join, unless)
 import Data.ByteString      (ByteString)
 import Data.IORef
 import Data.Monoid
@@ -98,6 +118,7 @@ import Data.String          (IsString(..))
 import Data.Text.Encoding.Error (lenientDecode)
 import Foreign
 import Foreign.C
+import qualified System.IO.Unsafe as IOU
 
 newtype Database = Database (Ptr CDatabase)
     deriving (Eq, Show)
@@ -171,6 +192,13 @@ toStepResult code =
         ErrorRow  -> Right Row
         ErrorDone -> Right Done
         err       -> Left err
+
+-- | The context in which a custom SQL function is executed.
+newtype FuncContext = FuncContext (Ptr CContext)
+    deriving (Eq, Show)
+
+-- | The arguments of a custom SQL function.
+data FuncArgs = FuncArgs CArgCount (Ptr (Ptr CValue))
 
 ------------------------------------------------------------------------
 
@@ -499,6 +527,134 @@ changes (Database db) =
 totalChanges :: Database -> IO Int
 totalChanges (Database db) =
     fromIntegral <$> c_sqlite3_total_changes db
+
+
+-- We use CFuncPtrs to store the function pointers used in the implementation
+-- of custom SQL functions so that sqlite can deallocate those pointers when
+-- the function is deleted or overwritten
+data CFuncPtrs = CFuncPtrs (FunPtr CFunc) (FunPtr CFunc) (FunPtr CFuncFinal)
+
+-- Deallocate the function pointers used to implement a custom function
+-- This is only called by sqlite so we create one global FunPtr to pass to
+-- sqlite
+destroyCFuncPtrs :: FunPtr (CFuncDestroy ())
+destroyCFuncPtrs = IOU.unsafePerformIO $ mkCFuncDestroy destroy
+  where
+    destroy p = do
+        let p' = castPtrToStablePtr p
+        CFuncPtrs p1 p2 p3 <- deRefStablePtr p'
+        unless (p1 == nullFunPtr) $ freeHaskellFunPtr p1
+        unless (p2 == nullFunPtr) $ freeHaskellFunPtr p2
+        unless (p3 == nullFunPtr) $ freeHaskellFunPtr p3
+        freeStablePtr p'
+{-# NOINLINE destroyCFuncPtrs #-}
+
+-- | <http://sqlite.org/c3ref/create_function.html>
+--
+-- Create a custom SQL function or redefine the behavior of an existing
+-- function.
+createFunction
+    :: Database
+    -> Utf8           -- ^ Name of the function.
+    -> Maybe ArgCount -- ^ Number of arguments. 'Nothing' means that the
+                      --   function accepts any number of arguments.
+    -> Bool           -- ^ Is the function deterministic?
+    -> (FuncContext -> FuncArgs -> IO ())
+                      -- ^ Implementation of the function.
+    -> IO (Either Error ())
+createFunction (Database db) (Utf8 name) nArgs isDet fun = mask_ $ do
+    funPtr <- mkCFunc fun'
+    u <- newStablePtr $ CFuncPtrs funPtr nullFunPtr nullFunPtr
+    BS.useAsCString name $ \namePtr ->
+        toResult () <$>
+            c_sqlite3_create_function_v2
+                db namePtr (maybeArgCount nArgs) flags (castStablePtrToPtr u)
+                funPtr nullFunPtr nullFunPtr destroyCFuncPtrs
+  where
+    flags = if isDet then c_SQLITE_DETERMINISTIC else 0
+    fun' ctx nArgs' cvals =
+        catchAsResultError ctx $
+            fun (FuncContext ctx) (FuncArgs nArgs' cvals)
+
+-- call c_sqlite3_result_error in the event of an error
+catchAsResultError :: Ptr CContext -> IO () -> IO ()
+catchAsResultError ctx action = catch action $ \exn -> do
+    let msg = show (exn :: SomeException)
+    withCAStringLen msg $ \(ptr, len) ->
+        c_sqlite3_result_error ctx ptr (fromIntegral len)
+
+-- | Delete an SQL function.
+deleteFunction :: Database -> Utf8 -> Maybe ArgCount -> IO (Either Error ())
+deleteFunction (Database db) (Utf8 name) nArgs =
+    BS.useAsCString name $ \namePtr ->
+        toResult () <$>
+            c_sqlite3_create_function_v2
+                db namePtr (maybeArgCount nArgs) 0 nullPtr
+                nullFunPtr nullFunPtr nullFunPtr nullFunPtr
+
+maybeArgCount :: Maybe ArgCount -> CArgCount
+maybeArgCount (Just n) = toFFI n
+maybeArgCount Nothing = -1
+
+
+funcArgCount :: FuncArgs -> ArgCount
+funcArgCount (FuncArgs nArgs _) = fromIntegral nArgs
+
+funcArgType :: FuncArgs -> ArgIndex -> IO ColumnType
+funcArgType =
+    extractFuncArg NullColumn (fmap decodeColumnType . c_sqlite3_value_type)
+
+funcArgInt64 :: FuncArgs -> ArgIndex -> IO Int64
+funcArgInt64 = extractFuncArg 0 c_sqlite3_value_int64
+
+funcArgDouble :: FuncArgs -> ArgIndex -> IO Double
+funcArgDouble = extractFuncArg 0 c_sqlite3_value_double
+
+funcArgText :: FuncArgs -> ArgIndex -> IO Utf8
+funcArgText = extractFuncArg mempty $ \cval -> do
+    ptr <- c_sqlite3_value_text cval
+    len <- c_sqlite3_value_bytes cval
+    Utf8 <$> packCStringLen ptr len
+
+funcArgBlob :: FuncArgs -> ArgIndex -> IO ByteString
+funcArgBlob  = extractFuncArg mempty $ \cval -> do
+    ptr <- c_sqlite3_value_blob cval
+    len <- c_sqlite3_value_bytes cval
+    packCStringLen ptr len
+
+-- the c_sqlite3_value_* family of functions don't handle null pointers, so
+-- we must use a wrapper to guarantee that a sensible value is returned if
+-- we are out of bounds
+extractFuncArg :: a -> (Ptr CValue -> IO a) -> FuncArgs -> ArgIndex -> IO a
+extractFuncArg defVal extract (FuncArgs nArgs p) idx
+    | 0 <= idx && idx < fromIntegral nArgs = do
+        cval <- peekElemOff p (fromIntegral idx)
+        extract cval
+    | otherwise = return defVal
+
+
+funcResultInt64 :: FuncContext -> Int64 -> IO ()
+funcResultInt64 (FuncContext ctx) value =
+    c_sqlite3_result_int64 ctx value
+
+funcResultDouble :: FuncContext -> Double -> IO ()
+funcResultDouble (FuncContext ctx) value =
+    c_sqlite3_result_double ctx value
+
+funcResultText :: FuncContext -> Utf8 -> IO ()
+funcResultText (FuncContext ctx) (Utf8 value) =
+    unsafeUseAsCStringLenNoNull value $ \ptr len ->
+        c_sqlite3_result_text ctx ptr len c_SQLITE_TRANSIENT
+
+funcResultBlob :: FuncContext -> ByteString -> IO ()
+funcResultBlob (FuncContext ctx) value =
+    unsafeUseAsCStringLenNoNull value $ \ptr len ->
+        c_sqlite3_result_blob ctx ptr len c_SQLITE_TRANSIENT
+
+funcResultNull :: FuncContext -> IO ()
+funcResultNull (FuncContext ctx) =
+    c_sqlite3_result_null ctx
+
 
 enableLoadExtension :: Database -> IO (Either Error ())
 enableLoadExtension (Database db) = do
