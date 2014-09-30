@@ -56,6 +56,38 @@ module Database.SQLite3.Bindings (
     c_sqlite3_changes,
     c_sqlite3_total_changes,
 
+    -- * Create Or Redefine SQL Functions
+    c_sqlite3_create_function_v2,
+    CFunc,
+    CFuncFinal,
+    CFuncDestroy,
+    mkCFunc,
+    mkCFuncFinal,
+    mkCFuncDestroy,
+    c_sqlite3_user_data,
+    c_sqlite3_context_db_handle,
+    c_sqlite3_aggregate_context,
+
+    -- * Obtaining SQL Function Parameter Values
+    -- | <http://www.sqlite.org/c3ref/value_blob.html>
+    c_sqlite3_value_type,
+    c_sqlite3_value_bytes,
+    c_sqlite3_value_blob,
+    c_sqlite3_value_text,
+    c_sqlite3_value_int64,
+    c_sqlite3_value_double,
+
+    -- * Setting The Result Of An SQL Function
+    -- | <http://www.sqlite.org/c3ref/result_blob.html>
+    c_sqlite3_result_null,
+    c_sqlite3_result_blob,
+    c_sqlite3_result_zeroblob,
+    c_sqlite3_result_text,
+    c_sqlite3_result_int64,
+    c_sqlite3_result_double,
+    c_sqlite3_result_value,
+    c_sqlite3_result_error,
+
     -- * Miscellaneous
     c_sqlite3_free,
 
@@ -278,6 +310,93 @@ foreign import ccall unsafe "sqlite3_changes"
 -- | <http://www.sqlite.org/c3ref/total_changes.html>
 foreign import ccall unsafe "sqlite3_total_changes"
     c_sqlite3_total_changes :: Ptr CDatabase -> IO CInt
+
+-- do not use unsafe import here, it might call back to haskell
+-- via the CFuncDestroy argument
+-- | <http://sqlite.org/c3ref/create_function.html>
+foreign import ccall "sqlite3_create_function_v2"
+    c_sqlite3_create_function_v2
+        :: Ptr CDatabase
+        -> CString         -- ^ Name of the function
+        -> CArgCount       -- ^ Number of arguments
+        -> CInt            -- ^ Preferred text encoding (also used to pass flags)
+        -> Ptr a           -- ^ User data
+        -> FunPtr CFunc
+        -> FunPtr CFunc
+        -> FunPtr CFuncFinal
+        -> FunPtr (CFuncDestroy a)
+        -> IO CError
+
+type CFunc          = Ptr CContext -> CArgCount -> Ptr (Ptr CValue) -> IO ()
+
+type CFuncFinal     = Ptr CContext -> IO ()
+
+type CFuncDestroy a = Ptr a -> IO ()
+
+foreign import ccall "wrapper"
+    mkCFunc        :: CFunc          -> IO (FunPtr CFunc)
+
+foreign import ccall "wrapper"
+    mkCFuncFinal   :: CFuncFinal     -> IO (FunPtr CFuncFinal)
+
+foreign import ccall "wrapper"
+    mkCFuncDestroy :: CFuncDestroy a -> IO (FunPtr (CFuncDestroy a))
+
+-- | <http://www.sqlite.org/c3ref/user_data.html>
+foreign import ccall unsafe "sqlite3_user_data"
+    c_sqlite3_user_data :: Ptr CContext -> IO (Ptr a)
+
+-- | <http://www.sqlite.org/c3ref/context_db_handle.html>
+foreign import ccall unsafe "sqlite3_context_db_handle"
+    c_sqlite3_context_db_handle :: Ptr CContext -> IO (Ptr CDatabase)
+
+-- | <http://www.sqlite.org/c3ref/aggregate_context.html>
+foreign import ccall unsafe "sqlite3_aggregate_context"
+    c_sqlite3_aggregate_context :: Ptr CContext -> CNumBytes -> IO (Ptr a)
+
+
+foreign import ccall unsafe "sqlite3_value_type"
+    c_sqlite3_value_type   :: Ptr CValue -> IO CColumnType
+
+foreign import ccall unsafe "sqlite3_value_bytes"
+    c_sqlite3_value_bytes  :: Ptr CValue -> IO CNumBytes
+
+foreign import ccall unsafe "sqlite3_value_blob"
+    c_sqlite3_value_blob   :: Ptr CValue -> IO (Ptr a)
+
+foreign import ccall unsafe "sqlite3_value_text"
+    c_sqlite3_value_text   :: Ptr CValue -> IO CString
+
+foreign import ccall unsafe "sqlite3_value_int64"
+    c_sqlite3_value_int64  :: Ptr CValue -> IO Int64
+
+foreign import ccall unsafe "sqlite3_value_double"
+    c_sqlite3_value_double :: Ptr CValue -> IO Double
+
+
+foreign import ccall unsafe "sqlite3_result_null"
+    c_sqlite3_result_null     :: Ptr CContext -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_blob"
+    c_sqlite3_result_blob     :: Ptr CContext -> Ptr a -> CNumBytes -> Ptr CDestructor -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_zeroblob"
+    c_sqlite3_result_zeroblob :: Ptr CContext -> CNumBytes -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_text"
+    c_sqlite3_result_text     :: Ptr CContext -> CString -> CNumBytes -> Ptr CDestructor -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_int64"
+    c_sqlite3_result_int64    :: Ptr CContext -> Int64 -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_double"
+    c_sqlite3_result_double   :: Ptr CContext -> Double -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_value"
+    c_sqlite3_result_value    :: Ptr CContext -> Ptr CValue -> IO ()
+
+foreign import ccall unsafe "sqlite3_result_error"
+    c_sqlite3_result_error    :: Ptr CContext -> CString -> CNumBytes -> IO ()
 
 
 -- | <http://sqlite.org/c3ref/free.html>
