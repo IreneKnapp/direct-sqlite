@@ -60,6 +60,7 @@ module Database.SQLite3 (
 
     -- * Create custom SQL functions
     createFunction,
+    createAggregate,
     deleteFunction,
     -- ** Extract function arguments
     funcArgCount,
@@ -603,7 +604,24 @@ createFunction db name nArgs isDet fun =
     Direct.createFunction db (toUtf8 name) nArgs isDet fun
         >>= checkError (DetailDatabase db) ("createFunction " `appendShow` name)
 
--- | Delete an SQL function.
+-- | Like 'createFunction' except that it creates an aggregate function.
+createAggregate
+    :: Database
+    -> Text           -- ^ Name of the function.
+    -> Maybe ArgCount -- ^ Number of arguments.
+    -> a              -- ^ Initial aggregate state.
+    -> (FuncContext -> FuncArgs -> a -> IO a)
+                      -- ^ Process one row and update the aggregate state.
+    -> (FuncContext -> a -> IO ())
+                      -- ^ Called after all rows have been processed.
+                      --   Can be used to construct the returned value
+                      --   from the aggregate state.
+    -> IO ()
+createAggregate db name nArgs initSt xStep xFinal =
+    Direct.createAggregate db (toUtf8 name) nArgs initSt xStep xFinal
+        >>= checkError (DetailDatabase db) ("createAggregate " `appendShow` name)
+
+-- | Delete an SQL function (scalar or aggregate).
 deleteFunction :: Database -> Text -> Maybe ArgCount -> IO ()
 deleteFunction db name nArgs =
     Direct.deleteFunction db (toUtf8 name) nArgs

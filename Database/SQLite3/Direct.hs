@@ -64,6 +64,7 @@ module Database.SQLite3.Direct (
 
     -- * Create custom SQL functions
     createFunction,
+    createAggregate,
     deleteFunction,
     -- ** Extract function arguments
     funcArgCount,
@@ -576,6 +577,63 @@ createFunction (Database db) (Utf8 name) nArgs isDet fun = mask_ $ do
         catchAsResultError ctx $
             fun (FuncContext ctx) (FuncArgs nArgs' cvals)
 
+-- | Like 'createFunction' except that it creates an aggregate function.
+createAggregate
+    :: Database
+    -> Utf8           -- ^ Name of the function.
+    -> Maybe ArgCount -- ^ Number of arguments.
+    -> a              -- ^ Initial aggregate state.
+    -> (FuncContext -> FuncArgs -> a -> IO a)
+                      -- ^ Process one row and update the aggregate state.
+    -> (FuncContext -> a -> IO ())
+                      -- ^ Called after all rows have been processed.
+                      --   Can be used to construct the returned value
+                      --   from the aggregate state.
+    -> IO (Either Error ())
+createAggregate (Database db) (Utf8 name) nArgs initSt xStep xFinal = mask_ $ do
+    stepPtr <- mkCFunc xStep'
+    finalPtr <- mkCFuncFinal xFinal'
+    u <- newStablePtr $ CFuncPtrs nullFunPtr stepPtr finalPtr
+    BS.useAsCString name $ \namePtr ->
+        toResult () <$>
+            c_sqlite3_create_function_v2
+                db namePtr (maybeArgCount nArgs) 0 (castStablePtrToPtr u)
+                nullFunPtr stepPtr finalPtr destroyCFuncPtrs
+  where
+    -- we store the aggregate state in the buffer returned by
+    -- c_sqlite3_aggregate_context as a StablePtr pointing to an IORef that
+    -- contains the actual aggregate state
+    xStep' ctx nArgs' cvals =
+        catchAsResultError ctx $ do
+            aggCtx <- getAggregateContext ctx
+            aggStPtr <- peek aggCtx
+            aggStRef <-
+                if castStablePtrToPtr aggStPtr /= nullPtr then
+                    deRefStablePtr aggStPtr
+                else do
+                    aggStRef <- newIORef initSt
+                    aggStPtr' <- newStablePtr aggStRef
+                    poke aggCtx aggStPtr'
+                    return aggStRef
+            aggSt <- readIORef aggStRef
+            aggSt' <- xStep (FuncContext ctx) (FuncArgs nArgs' cvals) aggSt
+            writeIORef aggStRef aggSt'
+    xFinal' ctx = do
+        aggCtx <- getAggregateContext ctx
+        aggStPtr <- peek aggCtx
+        if castStablePtrToPtr aggStPtr == nullPtr then
+            catchAsResultError ctx $
+                xFinal (FuncContext ctx) initSt
+        else do
+            catchAsResultError ctx $ do
+                aggStRef <- deRefStablePtr aggStPtr
+                aggSt <- readIORef aggStRef
+                xFinal (FuncContext ctx) aggSt
+            freeStablePtr aggStPtr
+    getAggregateContext ctx =
+        c_sqlite3_aggregate_context ctx stPtrSize
+    stPtrSize = fromIntegral $ sizeOf (undefined :: StablePtr ())
+
 -- call c_sqlite3_result_error in the event of an error
 catchAsResultError :: Ptr CContext -> IO () -> IO ()
 catchAsResultError ctx action = catch action $ \exn -> do
@@ -583,7 +641,7 @@ catchAsResultError ctx action = catch action $ \exn -> do
     withCAStringLen msg $ \(ptr, len) ->
         c_sqlite3_result_error ctx ptr (fromIntegral len)
 
--- | Delete an SQL function.
+-- | Delete an SQL function (scalar or aggregate).
 deleteFunction :: Database -> Utf8 -> Maybe ArgCount -> IO (Either Error ())
 deleteFunction (Database db) (Utf8 name) nArgs =
     BS.useAsCString name $ \namePtr ->
