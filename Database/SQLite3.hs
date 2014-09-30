@@ -77,6 +77,10 @@ module Database.SQLite3 (
     funcResultBlob,
     funcResultNull,
 
+    -- * Create custom collations
+    createCollation,
+    deleteCollation,
+
     -- * Interrupting a long-running query
     interrupt,
     interruptibly,
@@ -644,3 +648,24 @@ funcResultSQLData ctx datum =
 funcResultText :: FuncContext -> Text -> IO ()
 funcResultText ctx value =
     Direct.funcResultText ctx (toUtf8 value)
+
+
+-- | <http://www.sqlite.org/c3ref/create_collation.html>
+createCollation
+    :: Database
+    -> Text                       -- ^ Name of the collation.
+    -> (Text -> Text -> Ordering) -- ^ Comparison function.
+    -> IO ()
+createCollation db name cmp =
+    Direct.createCollation db (toUtf8 name) cmp'
+        >>= checkError (DetailDatabase db) ("createCollation " `appendShow` name)
+  where
+    cmp' (Utf8 s1) (Utf8 s2) = cmp (fromUtf8'' s1) (fromUtf8'' s2)
+    -- avoid throwing exceptions as much as possible
+    fromUtf8'' = decodeUtf8With lenientDecode
+
+-- | Delete a collation.
+deleteCollation :: Database -> Text -> IO ()
+deleteCollation db name =
+    Direct.deleteCollation db (toUtf8 name)
+        >>= checkError (DetailDatabase db) ("deleteCollation " `appendShow` name)

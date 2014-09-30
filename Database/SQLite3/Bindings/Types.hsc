@@ -38,6 +38,7 @@ module Database.SQLite3.Bindings.Types (
     CNumBytes(..),
     CDestructor,
     c_SQLITE_TRANSIENT,
+    c_SQLITE_UTF8,
 
     -- * Custom functions
     ArgCount(..),
@@ -190,6 +191,9 @@ data CDestructor
 -- | Tells SQLite3 to make its own private copy of the data
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
+
+c_SQLITE_UTF8 :: CInt
+c_SQLITE_UTF8 = #{const SQLITE_UTF8}
 
 
 -- | Number of arguments of a user defined SQL function.

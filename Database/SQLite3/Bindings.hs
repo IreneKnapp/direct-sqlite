@@ -88,6 +88,11 @@ module Database.SQLite3.Bindings (
     c_sqlite3_result_value,
     c_sqlite3_result_error,
 
+    -- * Define New Collating Sequences
+    c_sqlite3_create_collation_v2,
+    CCompare,
+    mkCCompare,
+
     -- * Miscellaneous
     c_sqlite3_free,
 
@@ -397,6 +402,23 @@ foreign import ccall unsafe "sqlite3_result_value"
 
 foreign import ccall unsafe "sqlite3_result_error"
     c_sqlite3_result_error    :: Ptr CContext -> CString -> CNumBytes -> IO ()
+
+
+-- | <http://www.sqlite.org/c3ref/create_collation.html>
+foreign import ccall "sqlite3_create_collation_v2"
+    c_sqlite3_create_collation_v2
+        :: Ptr CDatabase
+        -> CString         -- ^ Name of the collation
+        -> CInt            -- ^ Text encoding
+        -> Ptr a           -- ^ User data
+        -> FunPtr (CCompare a)
+        -> FunPtr (CFuncDestroy a)
+        -> IO CError
+
+type CCompare a = Ptr a -> CNumBytes -> CString -> CNumBytes -> CString -> IO CInt
+
+foreign import ccall "wrapper"
+    mkCCompare :: CCompare a -> IO (FunPtr (CCompare a))
 
 
 -- | <http://sqlite.org/c3ref/free.html>

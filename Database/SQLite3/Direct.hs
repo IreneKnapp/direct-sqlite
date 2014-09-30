@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
 --
@@ -79,6 +80,10 @@ module Database.SQLite3.Direct (
     funcResultText,
     funcResultBlob,
     funcResultNull,
+
+    -- * Create custom collations
+    createCollation,
+    deleteCollation,
 
     -- * Interrupting a long-running query
     interrupt,
@@ -712,6 +717,53 @@ funcResultBlob (FuncContext ctx) value =
 funcResultNull :: FuncContext -> IO ()
 funcResultNull (FuncContext ctx) =
     c_sqlite3_result_null ctx
+
+
+-- Deallocate the function pointer to the comparison function used to
+-- implement a custom collation
+destroyCCompare :: CFuncDestroy ()
+destroyCCompare ptr = freeHaskellFunPtr ptr'
+  where
+    ptr' = castPtrToFunPtr ptr :: FunPtr (CCompare ())
+
+-- This is called by sqlite so we create one global FunPtr to pass to sqlite
+destroyCComparePtr :: FunPtr (CFuncDestroy ())
+destroyCComparePtr = IOU.unsafePerformIO $ mkCFuncDestroy destroyCCompare
+{-# NOINLINE destroyCComparePtr #-}
+
+-- | <http://www.sqlite.org/c3ref/create_collation.html>
+createCollation
+    :: Database
+    -> Utf8                       -- ^ Name of the collation.
+    -> (Utf8 -> Utf8 -> Ordering) -- ^ Comparison function.
+    -> IO (Either Error ())
+createCollation (Database db) (Utf8 name) cmp = mask_ $ do
+    cmpPtr <- mkCCompare cmp'
+    let u = castFunPtrToPtr cmpPtr
+    BS.useAsCString name $ \namePtr ->
+        toResult () <$> do
+            r <- c_sqlite3_create_collation_v2
+                db namePtr c_SQLITE_UTF8 u cmpPtr destroyCComparePtr
+            -- sqlite does not call the destructor for us in case of an
+            -- error
+            unless (r == CError 0) $
+                destroyCCompare $ castFunPtrToPtr cmpPtr
+            return r
+  where
+    cmp' _ len1 ptr1 len2 ptr2 = handle exnHandler $ do
+        s1 <- Utf8 <$> packCStringLen ptr1 len1
+        s2 <- Utf8 <$> packCStringLen ptr2 len2
+        let c = cmp s1 s2
+        evaluate (fromIntegral $ fromEnum c - 1)
+    exnHandler (_ :: SomeException) = return (-1)
+
+-- | Delete a collation.
+deleteCollation :: Database -> Utf8 -> IO (Either Error ())
+deleteCollation (Database db) (Utf8 name) =
+    BS.useAsCString name $ \namePtr ->
+        toResult () <$> do
+            c_sqlite3_create_collation_v2
+                db namePtr c_SQLITE_UTF8 nullPtr nullFunPtr nullFunPtr
 
 
 enableLoadExtension :: Database -> IO (Either Error ())
