@@ -9,6 +9,7 @@ import Control.Monad        (forM_, liftM3, when)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
 import Data.Typeable
+import Data.Monoid
 import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
@@ -55,6 +56,9 @@ regressionTests =
     , TestLabel "GetAutoCommit" . testGetAutoCommit
     , TestLabel "Debug"         . testStatementSql
     , TestLabel "Debug"         . testTracing
+    , TestLabel "CustomFunc"    . testCustomFunction
+    , TestLabel "CustomAggr"    . testCustomAggragate
+    , TestLabel "CustomColl"    . testCustomCollation
     ] ++
     (if rtsSupportsBoundThreads then
     [ TestLabel "Interrupt"     . testInterrupt
@@ -718,6 +722,58 @@ testStatementSql TestEnv{..} = TestCase $ do
   withStmt conn q1 $ \stmt -> do
     Just (Direct.Utf8 sql1) <- Direct.statementSql stmt
     T.encodeUtf8 q1 @=? sql1
+
+testCustomFunction :: TestEnv -> Test
+testCustomFunction TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    createFunction conn "repeat" (Just 2) True repeatString
+    withStmt conn "SELECT repeat(3,'abc')" $ \stmt -> do
+      Row <- step stmt
+      [SQLText "abcabcabc"] <- columns stmt
+      Done <- step stmt
+      return ()
+  where
+    repeatString ctx args = do
+        n <- funcArgInt64 args 0
+        s <- funcArgText args 1
+        funcResultText ctx $ T.concat $ replicate (fromIntegral n) s
+
+testCustomAggragate :: TestEnv -> Test
+testCustomAggragate TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE tbl (n INT)"
+    exec conn "INSERT INTO tbl(n) VALUES (12), (-3), (7)"
+    createAggregate conn "mysum" (Just 1) 0 mySumStep funcResultInt64
+    withStmt conn "SELECT mysum(n) FROM tbl" $ \stmt -> do
+      Row <- step stmt
+      [SQLInteger 16] <- columns stmt
+      Done <- step stmt
+      return ()
+  where
+    mySumStep _ args s = do
+        n <- funcArgInt64 args 0
+        return (s + n)
+
+testCustomCollation :: TestEnv -> Test
+testCustomCollation TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE tbl (n TEXT)"
+    exec conn "INSERT INTO tbl(n) VALUES ('dog'),('mouse'),('ox'),('cat')"
+    createCollation conn "len" cmpLen
+    withStmt conn "SELECT * FROM tbl ORDER BY n COLLATE len" $ \stmt -> do
+      Row <- step stmt
+      [SQLText "ox"] <- columns stmt
+      Row <- step stmt
+      [SQLText "cat"] <- columns stmt
+      Row <- step stmt
+      [SQLText "dog"] <- columns stmt
+      Row <- step stmt
+      [SQLText "mouse"] <- columns stmt
+      Done <- step stmt
+      return ()
+  where
+    -- order by length first, then by lexicographical order
+    cmpLen s1 s2 = compare (T.length s1) (T.length s2) <> compare s1 s2
 
 testInterrupt :: TestEnv -> Test
 testInterrupt TestEnv{..} = TestCase $
