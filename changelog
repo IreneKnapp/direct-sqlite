@@ -1,6 +1,15 @@
+v2.3.14
+	* Upgrade the bundled SQLite3 library to 3.8.5.
+
+	* Add bindings for controlling whether extension loading is
+	  enabled or disabled.
+
+	* Bump text and bytestring versions (actually, risking it and
+	  removing upper bounds)
+
 v2.3.13
-    * Add support for named parameters to queries.  Split this changelog into
-      a separate file (preserving its history).
+	* Add support for named parameters to queries.  Split this changelog into
+	  a separate file (preserving its history).
 
 v2.3.12
 	* Upgrade bundled SQLite3 to 3.8.4.1.
