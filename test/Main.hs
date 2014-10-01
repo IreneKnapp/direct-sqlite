@@ -57,6 +57,7 @@ regressionTests =
     , TestLabel "Debug"         . testStatementSql
     , TestLabel "Debug"         . testTracing
     , TestLabel "CustomFunc"    . testCustomFunction
+    , TestLabel "CustomFuncErr" . testCustomFunctionError
     , TestLabel "CustomAggr"    . testCustomAggragate
     , TestLabel "CustomColl"    . testCustomCollation
     ] ++
@@ -732,11 +733,25 @@ testCustomFunction TestEnv{..} = TestCase $ do
       [SQLText "abcabcabc"] <- columns stmt
       Done <- step stmt
       return ()
+    deleteFunction conn "repeat" (Just 2)
+    Left SQLError{sqlError = ErrorError} <-
+        try $ exec conn "SELECT repeat(3,'abc')"
+    return ()
   where
     repeatString ctx args = do
         n <- funcArgInt64 args 0
         s <- funcArgText args 1
         funcResultText ctx $ T.concat $ replicate (fromIntegral n) s
+
+testCustomFunctionError :: TestEnv -> Test
+testCustomFunctionError TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    createFunction conn "fail" (Just 0) True throwError
+    Left SQLError{..} <- try $ exec conn "SELECT fail()"
+    assertBool "Catch exception"
+        (sqlError == ErrorError && sqlErrorDetails == "error message")
+  where
+    throwError _ _ = error "error message"
 
 testCustomAggragate :: TestEnv -> Test
 testCustomAggragate TestEnv{..} = TestCase $ do
@@ -749,6 +764,10 @@ testCustomAggragate TestEnv{..} = TestCase $ do
       [SQLInteger 16] <- columns stmt
       Done <- step stmt
       return ()
+    deleteFunction conn "mysum" (Just 1)
+    Left SQLError{sqlError = ErrorError} <-
+        try $ exec conn "SELECT mysum(n) FROM tbl"
+    return ()
   where
     mySumStep _ args s = do
         n <- funcArgInt64 args 0
@@ -771,6 +790,10 @@ testCustomCollation TestEnv{..} = TestCase $ do
       [SQLText "mouse"] <- columns stmt
       Done <- step stmt
       return ()
+    deleteCollation conn "len"
+    Left SQLError{sqlError = ErrorError} <-
+        try $ exec conn "SELECT * FROM tbl ORDER BY n COLLATE len"
+    return ()
   where
     -- order by length first, then by lexicographical order
     cmpLen s1 s2 = compare (T.length s1) (T.length s2) <> compare s1 s2
