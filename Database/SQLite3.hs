@@ -58,6 +58,29 @@ module Database.SQLite3 (
     lastInsertRowId,
     changes,
 
+    -- * Create custom SQL functions
+    createFunction,
+    createAggregate,
+    deleteFunction,
+    -- ** Extract function arguments
+    funcArgCount,
+    funcArgType,
+    funcArgInt64,
+    funcArgDouble,
+    funcArgText,
+    funcArgBlob,
+    -- ** Set the result of a function
+    funcResultSQLData,
+    funcResultInt64,
+    funcResultDouble,
+    funcResultText,
+    funcResultBlob,
+    funcResultNull,
+
+    -- * Create custom collations
+    createCollation,
+    deleteCollation,
+
     -- * Interrupting a long-running query
     interrupt,
     interruptibly,
@@ -68,6 +91,8 @@ module Database.SQLite3 (
     SQLData(..),
     SQLError(..),
     ColumnType(..),
+    FuncContext,
+    FuncArgs,
 
     -- ** Results and errors
     StepResult(..),
@@ -77,6 +102,8 @@ module Database.SQLite3 (
     ParamIndex(..),
     ColumnIndex(..),
     ColumnCount,
+    ArgCount(..),
+    ArgIndex,
 ) where
 
 import Database.SQLite3.Direct
@@ -89,6 +116,10 @@ import Database.SQLite3.Direct
     , ColumnIndex(..)
     , ColumnCount
     , Utf8(..)
+    , FuncContext
+    , FuncArgs
+    , ArgCount(..)
+    , ArgIndex
 
     -- Re-exported from Database.SQLite3.Direct without modification.
     -- Note that if this module were in another package, source links would not
@@ -100,6 +131,15 @@ import Database.SQLite3.Direct
     , columnBlob
     , columnInt64
     , columnDouble
+    , funcArgCount
+    , funcArgType
+    , funcArgInt64
+    , funcArgDouble
+    , funcArgBlob
+    , funcResultInt64
+    , funcResultDouble
+    , funcResultBlob
+    , funcResultNull
     , lastInsertRowId
     , changes
     , interrupt
@@ -547,3 +587,85 @@ typedColumns statement = zipWithM f [0..] where
     f idx theType = case theType of
         Nothing -> column statement idx
         Just t  -> typedColumn t statement idx
+
+
+-- | <http://sqlite.org/c3ref/create_function.html>
+--
+-- Create a custom SQL function or redefine the behavior of an existing
+-- function. If the function is deterministic, i.e. if it always returns the
+-- same result given the same input, you can set the boolean flag to let
+-- @sqlite@ perform additional optimizations.
+createFunction
+    :: Database
+    -> Text           -- ^ Name of the function.
+    -> Maybe ArgCount -- ^ Number of arguments. 'Nothing' means that the
+                      --   function accepts any number of arguments.
+    -> Bool           -- ^ Is the function deterministic?
+    -> (FuncContext -> FuncArgs -> IO ())
+                      -- ^ Implementation of the function.
+    -> IO ()
+createFunction db name nArgs isDet fun =
+    Direct.createFunction db (toUtf8 name) nArgs isDet fun
+        >>= checkError (DetailDatabase db) ("createFunction " `appendShow` name)
+
+-- | Like 'createFunction' except that it creates an aggregate function.
+createAggregate
+    :: Database
+    -> Text           -- ^ Name of the function.
+    -> Maybe ArgCount -- ^ Number of arguments.
+    -> a              -- ^ Initial aggregate state.
+    -> (FuncContext -> FuncArgs -> a -> IO a)
+                      -- ^ Process one row and update the aggregate state.
+    -> (FuncContext -> a -> IO ())
+                      -- ^ Called after all rows have been processed.
+                      --   Can be used to construct the returned value
+                      --   from the aggregate state.
+    -> IO ()
+createAggregate db name nArgs initSt xStep xFinal =
+    Direct.createAggregate db (toUtf8 name) nArgs initSt xStep xFinal
+        >>= checkError (DetailDatabase db) ("createAggregate " `appendShow` name)
+
+-- | Delete an SQL function (scalar or aggregate).
+deleteFunction :: Database -> Text -> Maybe ArgCount -> IO ()
+deleteFunction db name nArgs =
+    Direct.deleteFunction db (toUtf8 name) nArgs
+        >>= checkError (DetailDatabase db) ("deleteFunction " `appendShow` name)
+
+funcArgText :: FuncArgs -> ArgIndex -> IO Text
+funcArgText args argIndex =
+    Direct.funcArgText args argIndex
+        >>= fromUtf8 "Database.SQLite3.funcArgText: Invalid UTF-8"
+
+funcResultSQLData :: FuncContext -> SQLData -> IO ()
+funcResultSQLData ctx datum =
+    case datum of
+        SQLInteger v -> funcResultInt64  ctx v
+        SQLFloat   v -> funcResultDouble ctx v
+        SQLText    v -> funcResultText   ctx v
+        SQLBlob    v -> funcResultBlob   ctx v
+        SQLNull      -> funcResultNull   ctx
+
+funcResultText :: FuncContext -> Text -> IO ()
+funcResultText ctx value =
+    Direct.funcResultText ctx (toUtf8 value)
+
+
+-- | <http://www.sqlite.org/c3ref/create_collation.html>
+createCollation
+    :: Database
+    -> Text                       -- ^ Name of the collation.
+    -> (Text -> Text -> Ordering) -- ^ Comparison function.
+    -> IO ()
+createCollation db name cmp =
+    Direct.createCollation db (toUtf8 name) cmp'
+        >>= checkError (DetailDatabase db) ("createCollation " `appendShow` name)
+  where
+    cmp' (Utf8 s1) (Utf8 s2) = cmp (fromUtf8'' s1) (fromUtf8'' s2)
+    -- avoid throwing exceptions as much as possible
+    fromUtf8'' = decodeUtf8With lenientDecode
+
+-- | Delete a collation.
+deleteCollation :: Database -> Text -> IO ()
+deleteCollation db name =
+    Direct.deleteCollation db (toUtf8 name)
+        >>= checkError (DetailDatabase db) ("deleteCollation " `appendShow` name)
