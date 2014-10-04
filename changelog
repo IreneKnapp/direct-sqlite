@@ -1,4 +1,6 @@
 v2.3.14
+	* Add custom functions, aggregates and collations.
+
 	* Upgrade the bundled SQLite3 library to 3.8.5.
 
 	* Add bindings for controlling whether extension loading is
