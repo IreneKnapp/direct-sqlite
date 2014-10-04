@@ -7,6 +7,8 @@ module Database.SQLite3.Bindings.Types (
     -- | <http://www.sqlite.org/c3ref/objlist.html>
     CDatabase,
     CStatement,
+    CValue,
+    CContext,
 
     -- * Enumerations
 
@@ -36,6 +38,13 @@ module Database.SQLite3.Bindings.Types (
     CNumBytes(..),
     CDestructor,
     c_SQLITE_TRANSIENT,
+    c_SQLITE_UTF8,
+
+    -- * Custom functions
+    ArgCount(..),
+    ArgIndex,
+    CArgCount(..),
+    c_SQLITE_DETERMINISTIC,
 
     -- * Conversion to and from FFI types
     FFIType(..),
@@ -99,6 +108,16 @@ data CDatabase
 --
 -- @CStatement@ = @sqlite3_stmt@
 data CStatement
+
+-- | <http://www.sqlite.org/c3ref/value.html>
+--
+-- @CValue@ = @sqlite3_value@
+data CValue
+
+-- | <http://www.sqlite.org/c3ref/context.html>
+--
+-- @CContext@ = @sqlite3_context@
+data CContext
 
 -- | Index of a parameter in a parameterized query.
 -- Parameter indices start from 1.
@@ -172,6 +191,40 @@ data CDestructor
 -- | Tells SQLite3 to make its own private copy of the data
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
+
+c_SQLITE_UTF8 :: CInt
+c_SQLITE_UTF8 = #{const SQLITE_UTF8}
+
+
+-- | Number of arguments of a user defined SQL function.
+newtype ArgCount = ArgCount Int
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show ArgCount where
+    show (ArgCount n) = show n
+
+instance Bounded ArgCount where
+    minBound = ArgCount 0
+    maxBound = ArgCount (#{const SQLITE_LIMIT_FUNCTION_ARG})
+
+-- | Index of an argument to a custom function. Indices start from 0.
+type ArgIndex = ArgCount
+
+newtype CArgCount = CArgCount CInt
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+
+-- | This just shows the underlying integer, without the data constructor.
+instance Show CArgCount where
+    show (CArgCount n) = show n
+
+instance Bounded CArgCount where
+    minBound = CArgCount (-1)
+    maxBound = CArgCount #{const SQLITE_LIMIT_FUNCTION_ARG}
+
+-- | Tells SQLite3 that the defined custom SQL function is deterministic.
+c_SQLITE_DETERMINISTIC :: CInt
+c_SQLITE_DETERMINISTIC = #{const SQLITE_DETERMINISTIC}
 
 
 -- | <http://www.sqlite.org/c3ref/c_abort.html>
@@ -303,3 +356,7 @@ instance FFIType Error CError where
 instance FFIType ColumnType CColumnType where
     toFFI = encodeColumnType
     fromFFI = decodeColumnType
+
+instance FFIType ArgCount CArgCount where
+    toFFI (ArgCount n)  = CArgCount (fromIntegral n)
+    fromFFI (CArgCount n) = ArgCount (fromIntegral n)
