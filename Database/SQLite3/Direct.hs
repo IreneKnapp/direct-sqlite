@@ -54,9 +54,7 @@ module Database.SQLite3.Direct (
     columnBlob,
 
     -- * control loading of extensions
-    enableLoadExtension,
-    disableLoadExtension,
-
+    setLoadExtensionEnabled,
 
     -- * Result statistics
     lastInsertRowId,
@@ -500,10 +498,10 @@ totalChanges :: Database -> IO Int
 totalChanges (Database db) =
     fromIntegral <$> c_sqlite3_total_changes db
 
-enableLoadExtension :: Database -> IO (Either Error ())
-enableLoadExtension (Database db) = do
-    toResult () <$> c_sqlite3_enable_load_extension db True
 
-disableLoadExtension :: Database -> IO (Either Error ())
-disableLoadExtension (Database db) = do
-    toResult () <$> c_sqlite3_enable_load_extension db False
+-- | <http://www.sqlite.org/c3ref/enable_load_extension.html>
+--
+-- Enable or disable extension loading.
+setLoadExtensionEnabled :: Database -> Bool -> IO (Either Error ())
+setLoadExtensionEnabled (Database db) enabled = do
+    toResult () <$> c_sqlite3_enable_load_extension db enabled
