@@ -639,7 +639,7 @@ createAggregate (Database db) (Utf8 name) nArgs initSt xStep xFinal = mask_ $ do
 
 -- call c_sqlite3_result_error in the event of an error
 catchAsResultError :: Ptr CContext -> IO () -> IO ()
-catchAsResultError ctx action = catch action $ \exn -> do
+catchAsResultError ctx action = E.catch action $ \exn -> do
     let msg = show (exn :: SomeException)
     withCAStringLen msg $ \(ptr, len) ->
         c_sqlite3_result_error ctx ptr (fromIntegral len)
