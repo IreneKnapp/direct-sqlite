@@ -45,6 +45,7 @@ module Database.SQLite3.Direct (
     bindDouble,
     bindText,
     bindBlob,
+    bindZeroBlob,
     bindNull,
 
     -- * Reading the result row
@@ -79,6 +80,7 @@ module Database.SQLite3.Direct (
     funcResultDouble,
     funcResultText,
     funcResultBlob,
+    funcResultZeroBlob,
     funcResultNull,
     getFuncContextDatabase,
 
@@ -495,6 +497,11 @@ bindBlob (Statement stmt) idx value =
         toResult () <$>
             c_sqlite3_bind_blob stmt (toFFI idx) ptr len c_SQLITE_TRANSIENT
 
+bindZeroBlob :: Statement -> ParamIndex -> Int -> IO (Either Error ())
+bindZeroBlob (Statement stmt) idx len =
+    toResult () <$>
+        c_sqlite3_bind_zeroblob stmt (toFFI idx) (fromIntegral len)
+
 bindNull :: Statement -> ParamIndex -> IO (Either Error ())
 bindNull (Statement stmt) idx =
     toResult () <$> c_sqlite3_bind_null stmt (toFFI idx)
@@ -723,6 +730,10 @@ funcResultBlob :: FuncContext -> ByteString -> IO ()
 funcResultBlob (FuncContext ctx) value =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         c_sqlite3_result_blob ctx ptr len c_SQLITE_TRANSIENT
+
+funcResultZeroBlob :: FuncContext -> Int -> IO ()
+funcResultZeroBlob (FuncContext ctx) len =
+    c_sqlite3_result_zeroblob ctx (fromIntegral len)
 
 funcResultNull :: FuncContext -> IO ()
 funcResultNull (FuncContext ctx) =

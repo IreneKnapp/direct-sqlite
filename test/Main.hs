@@ -248,6 +248,7 @@ testBind :: TestEnv -> Test
 testBind TestEnv{..} = TestCase $ do
   bracket (prepare conn "SELECT ?") finalize testBind1
   bracket (prepare conn "SELECT ?+?") finalize testBind2
+  bracket (prepare conn "SELECT ?,?") finalize testBind3
   where
     testBind1 stmt = do
       let params =  [SQLInteger 3]
@@ -264,6 +265,16 @@ testBind TestEnv{..} = TestCase $ do
       res <- columns stmt
       Done <- step stmt
       assertEqual "two params param" [SQLInteger 2] res
+
+    testBind3 stmt = do
+      let len = 7
+          bs = B.replicate len 0
+      bindBlob stmt 1 bs
+      bindZeroBlob stmt 2 len
+      Row <- step stmt
+      res <- columns stmt
+      Done <- step stmt
+      assertEqual "blob vs. zeroblob" [SQLBlob bs, SQLBlob bs] res
 
 -- Test bindParameterCount
 testBindParamCounts :: TestEnv -> Test

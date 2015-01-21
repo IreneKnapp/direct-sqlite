@@ -38,6 +38,7 @@ module Database.SQLite3 (
     bindDouble,
     bindText,
     bindBlob,
+    bindZeroBlob,
     bindNull,
 
     -- * Reading the result row
@@ -75,6 +76,7 @@ module Database.SQLite3 (
     funcResultDouble,
     funcResultText,
     funcResultBlob,
+    funcResultZeroBlob,
     funcResultNull,
     getFuncContextDatabase,
 
@@ -140,6 +142,7 @@ import Database.SQLite3.Direct
     , funcResultInt64
     , funcResultDouble
     , funcResultBlob
+    , funcResultZeroBlob
     , funcResultNull
     , getFuncContextDatabase
     , lastInsertRowId
@@ -465,6 +468,11 @@ bindBlob :: Statement -> ParamIndex -> ByteString -> IO ()
 bindBlob statement parameterIndex byteString =
     Direct.bindBlob statement parameterIndex byteString
         >>= checkError (DetailStatement statement) "bind blob"
+
+bindZeroBlob :: Statement -> ParamIndex -> Int -> IO ()
+bindZeroBlob statement parameterIndex len =
+    Direct.bindZeroBlob statement parameterIndex len
+        >>= checkError (DetailStatement statement) "bind zeroblob"
 
 bindDouble :: Statement -> ParamIndex -> Double -> IO ()
 bindDouble statement parameterIndex datum =

@@ -38,6 +38,7 @@ module Database.SQLite3.Bindings (
     -- * Binding Values To Prepared Statements
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
     c_sqlite3_bind_blob,
+    c_sqlite3_bind_zeroblob,
     c_sqlite3_bind_text,
     c_sqlite3_bind_double,
     c_sqlite3_bind_int64,
@@ -273,6 +274,10 @@ foreign import ccall unsafe "sqlite3_bind_blob"
         -> CNumBytes        -- ^ Length, in bytes.  This must not be negative.
         -> Ptr CDestructor
         -> IO CError
+
+foreign import ccall unsafe "sqlite3_bind_zeroblob"
+    c_sqlite3_bind_zeroblob
+        :: Ptr CStatement -> CParamIndex -> CInt -> IO CError
 
 foreign import ccall unsafe "sqlite3_bind_text"
     c_sqlite3_bind_text
