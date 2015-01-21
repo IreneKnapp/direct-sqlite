@@ -12,6 +12,7 @@ module Database.SQLite3.Direct (
     -- * Connection management
     open,
     close,
+    errcode,
     errmsg,
     setTrace,
     getAutoCommit,
@@ -262,6 +263,11 @@ close (Database db) =
 interrupt :: Database -> IO ()
 interrupt (Database db) =
     c_sqlite3_interrupt db
+
+-- | <http://www.sqlite.org/c3ref/errcode.html>
+errcode :: Database -> IO Error
+errcode (Database db) =
+    decodeError <$> c_sqlite3_errcode db
 
 -- | <http://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
