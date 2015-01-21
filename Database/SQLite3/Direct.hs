@@ -101,6 +101,15 @@ module Database.SQLite3.Direct (
     blobReadBuf,
     blobWrite,
 
+    -- * Online Backup API
+    -- | <https://www.sqlite.org/backup.html> and
+    -- <https://www.sqlite.org/c3ref/backup_finish.html>
+    backupInit,
+    backupFinish,
+    backupStep,
+    backupRemaining,
+    backupPagecount,
+
     -- * Types
     Database(..),
     Statement(..),
@@ -108,9 +117,11 @@ module Database.SQLite3.Direct (
     FuncContext(..),
     FuncArgs(..),
     Blob(..),
+    Backup(..),
 
     -- ** Results and errors
     StepResult(..),
+    BackupStepResult(..),
     Error(..),
 
     -- ** Special types
@@ -149,6 +160,11 @@ newtype Statement = Statement (Ptr CStatement)
 data StepResult
     = Row
     | Done
+    deriving (Eq, Show)
+
+data BackupStepResult
+    = BackupOK   -- ^ There are still more pages to be copied.
+    | BackupDone -- ^ All pages were successfully copied.
     deriving (Eq, Show)
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
@@ -213,6 +229,13 @@ toStepResult code =
         ErrorDone -> Right Done
         err       -> Left err
 
+toBackupStepResult :: CError -> Result BackupStepResult
+toBackupStepResult code =
+    case decodeError code of
+        ErrorOK   -> Right BackupOK
+        ErrorDone -> Right BackupDone
+        err       -> Left err
+
 -- | The context in which a custom SQL function is executed.
 newtype FuncContext = FuncContext (Ptr CContext)
     deriving (Eq, Show)
@@ -224,6 +247,12 @@ data FuncArgs = FuncArgs CArgCount (Ptr (Ptr CValue))
 data Blob = Blob Database (Ptr CBlob) -- we include the db handle to use in
     deriving (Eq, Show)               -- error messages since it cannot
                                       -- be retrieved any other way
+
+-- | A handle for an online backup process.
+data Backup = Backup Database (Ptr CBackup)
+    deriving (Eq, Show)
+-- we include the destination db handle to use in error messages since
+-- it cannot be retrieved any other way
 
 ------------------------------------------------------------------------
 
@@ -895,3 +924,36 @@ blobWrite (Blob _ blob) bs offset =
     BSU.unsafeUseAsCStringLen bs $ \(buf, len) ->
         toResult () <$>
             c_sqlite3_blob_write blob buf (fromIntegral len) (fromIntegral offset)
+
+
+backupInit
+    :: Database  -- ^ Destination database handle
+    -> Utf8      -- ^ Destination database name
+    -> Database  -- ^ Source database handle
+    -> Utf8      -- ^ Source database name
+    -> IO (Either Error Backup)
+backupInit (Database dstDb) (Utf8 dstName) (Database srcDb) (Utf8 srcName) =
+    BS.useAsCString dstName $ \dstName' ->
+    BS.useAsCString srcName $ \srcName' -> do
+        r <- c_sqlite3_backup_init dstDb dstName' srcDb srcName'
+        if r == nullPtr
+            then Left <$> errcode (Database dstDb)
+            else return (Right (Backup (Database dstDb) r))
+
+backupFinish :: Backup -> IO (Either Error ())
+backupFinish (Backup _ backup) =
+    toResult () <$>
+        c_sqlite3_backup_finish backup
+
+backupStep :: Backup -> Int -> IO (Either Error BackupStepResult)
+backupStep (Backup _ backup) pages =
+    toBackupStepResult <$>
+        c_sqlite3_backup_step backup (fromIntegral pages)
+
+backupRemaining :: Backup -> IO Int
+backupRemaining (Backup _ backup) =
+    fromIntegral <$> c_sqlite3_backup_remaining backup
+
+backupPagecount :: Backup -> IO Int
+backupPagecount (Backup _ backup) =
+    fromIntegral <$> c_sqlite3_backup_pagecount backup

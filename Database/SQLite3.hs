@@ -97,6 +97,15 @@ module Database.SQLite3 (
     blobReadBuf,
     blobWrite,
 
+    -- * Online Backup API
+    -- | <https://www.sqlite.org/backup.html> and
+    -- <https://www.sqlite.org/c3ref/backup_finish.html>
+    backupInit,
+    backupFinish,
+    backupStep,
+    backupRemaining,
+    backupPagecount,
+
     -- * Types
     Database,
     Statement,
@@ -106,9 +115,11 @@ module Database.SQLite3 (
     FuncContext,
     FuncArgs,
     Blob,
+    Backup,
 
     -- ** Results and errors
     StepResult(..),
+    BackupStepResult(..),
     Error(..),
 
     -- ** Special integers
@@ -124,6 +135,7 @@ import Database.SQLite3.Direct
     , Statement
     , ColumnType(..)
     , StepResult(..)
+    , BackupStepResult(..)
     , Error(..)
     , ParamIndex(..)
     , ColumnIndex(..)
@@ -134,6 +146,7 @@ import Database.SQLite3.Direct
     , ArgCount(..)
     , ArgIndex
     , Blob
+    , Backup
 
     -- Re-exported from Database.SQLite3.Direct without modification.
     -- Note that if this module were in another package, source links would not
@@ -160,6 +173,8 @@ import Database.SQLite3.Direct
     , changes
     , interrupt
     , blobBytes
+    , backupRemaining
+    , backupPagecount
     )
 
 import qualified Database.SQLite3.Direct as Direct
@@ -745,3 +760,26 @@ blobWrite
 blobWrite blob@(Direct.Blob db _) bs offset =
     Direct.blobWrite blob bs offset
         >>= checkError (DetailDatabase db) "blobWrite"
+
+
+backupInit
+    :: Database  -- ^ Destination database handle
+    -> Text      -- ^ Destination database name
+    -> Database  -- ^ Source database handle
+    -> Text      -- ^ Source database name
+    -> IO Backup
+backupInit dstDb dstName srcDb srcName =
+    Direct.backupInit dstDb (toUtf8 dstName) srcDb (toUtf8 srcName)
+        >>= checkError (DetailDatabase dstDb) "backupInit"
+
+backupFinish :: Backup -> IO (())
+backupFinish backup@(Direct.Backup dstDb _) =
+    Direct.backupFinish backup
+        >>= checkError (DetailDatabase dstDb) "backupFinish"
+
+backupStep :: Backup -> Int -> IO BackupStepResult
+backupStep backup pages =
+    Direct.backupStep backup pages
+        -- it appears that sqlite does not generate an
+        -- error message when sqlite3_backup_step fails
+        >>= checkError (DetailMessage "failed") "backupStep"

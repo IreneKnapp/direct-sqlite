@@ -10,6 +10,7 @@ module Database.SQLite3.Bindings.Types (
     CValue,
     CContext,
     CBlob,
+    CBackup,
 
     -- * Enumerations
 
@@ -124,6 +125,11 @@ data CContext
 --
 -- @CBlob@ = @sqlite3_blob@
 data CBlob
+
+-- | <https://www.sqlite.org/c3ref/backup.html>
+--
+-- @CBackup@ = @sqlite3_backup@
+data CBackup
 
 -- | Index of a parameter in a parameterized query.
 -- Parameter indices start from 1.

@@ -114,6 +114,15 @@ module Database.SQLite3.Bindings (
     c_sqlite3_blob_bytes,
     c_sqlite3_blob_read,
     c_sqlite3_blob_write,
+
+    -- * Online Backup API
+    -- | <https://www.sqlite.org/backup.html> and
+    -- <https://www.sqlite.org/c3ref/backup_finish.html>
+    c_sqlite3_backup_init,
+    c_sqlite3_backup_finish,
+    c_sqlite3_backup_step,
+    c_sqlite3_backup_remaining,
+    c_sqlite3_backup_pagecount,
 ) where
 
 import Database.SQLite3.Bindings.Types
@@ -500,3 +509,24 @@ foreign import ccall "sqlite3_blob_read"
 -- | <https://www.sqlite.org/c3ref/blob_write.html>
 foreign import ccall "sqlite3_blob_write"
     c_sqlite3_blob_write :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
+
+
+foreign import ccall "sqlite3_backup_init"
+    c_sqlite3_backup_init
+        :: Ptr CDatabase  -- ^ Destination database handle
+        -> CString        -- ^ Destination database name
+        -> Ptr CDatabase  -- ^ Source database handle
+        -> CString        -- ^ Source database name
+        -> IO (Ptr CBackup)
+
+foreign import ccall "sqlite3_backup_finish"
+    c_sqlite3_backup_finish :: Ptr CBackup -> IO CError
+
+foreign import ccall "sqlite3_backup_step"
+    c_sqlite3_backup_step :: Ptr CBackup -> CInt -> IO CError
+
+foreign import ccall unsafe "sqlite3_backup_remaining"
+    c_sqlite3_backup_remaining :: Ptr CBackup -> IO CInt
+
+foreign import ccall unsafe "sqlite3_backup_pagecount"
+    c_sqlite3_backup_pagecount :: Ptr CBackup -> IO CInt
