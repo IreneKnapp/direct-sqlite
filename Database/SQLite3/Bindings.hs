@@ -11,6 +11,7 @@ module Database.SQLite3.Bindings (
     CTraceCallback,
     mkCTraceCallback,
     c_sqlite3_get_autocommit,
+    c_sqlite3_enable_shared_cache,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -141,6 +142,10 @@ foreign import ccall "sqlite3_trace"
 -- | <http://www.sqlite.org/c3ref/get_autocommit.html>
 foreign import ccall unsafe "sqlite3_get_autocommit"
     c_sqlite3_get_autocommit :: Ptr CDatabase -> IO CInt
+
+-- | <https://www.sqlite.org/c3ref/enable_shared_cache.html>
+foreign import ccall unsafe "sqlite3_enable_shared_cache"
+    c_sqlite3_enable_shared_cache :: CInt -> IO CError
 
 
 foreign import ccall "sqlite3_exec"

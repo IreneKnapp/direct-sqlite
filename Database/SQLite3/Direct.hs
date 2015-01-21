@@ -15,6 +15,7 @@ module Database.SQLite3.Direct (
     errmsg,
     setTrace,
     getAutoCommit,
+    setSharedCacheEnabled,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -368,6 +369,16 @@ setTrace (Database db) logger =
 getAutoCommit :: Database -> IO Bool
 getAutoCommit (Database db) =
     (/= 0) <$> c_sqlite3_get_autocommit db
+
+
+-- | <https://www.sqlite.org/c3ref/enable_shared_cache.html>
+--
+-- Enable or disable shared cache for all future connections.
+setSharedCacheEnabled :: Bool -> IO (Either Error ())
+setSharedCacheEnabled val =
+    toResult () <$> c_sqlite3_enable_shared_cache
+        (if val then 1 else 0)
+
 
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
