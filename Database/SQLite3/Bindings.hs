@@ -97,7 +97,12 @@ module Database.SQLite3.Bindings (
     c_sqlite3_free,
 
     -- * Extensions
-    c_sqlite3_enable_load_extension
+    c_sqlite3_enable_load_extension,
+
+    -- * Write-Ahead Log Commit Hook
+    c_sqlite3_wal_hook,
+    CWalHook,
+    mkCWalHook,
 ) where
 
 import Database.SQLite3.Bindings.Types
@@ -429,3 +434,13 @@ foreign import ccall "sqlite3_free"
 -- | <http://sqlite.org/c3ref/enable_load_extension.html>
 foreign import ccall "sqlite3_enable_load_extension"
     c_sqlite3_enable_load_extension :: Ptr CDatabase -> Bool -> IO CError
+
+
+-- | <https://www.sqlite.org/c3ref/wal_hook.html>
+foreign import ccall unsafe "sqlite3_wal_hook"
+    c_sqlite3_wal_hook :: Ptr CDatabase -> FunPtr CWalHook -> Ptr a -> IO (Ptr ())
+
+type CWalHook = Ptr () -> Ptr CDatabase -> CString -> CInt -> IO CError
+
+foreign import ccall "wrapper"
+    mkCWalHook :: CWalHook -> IO (FunPtr CWalHook)
