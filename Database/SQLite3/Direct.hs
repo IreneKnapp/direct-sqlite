@@ -79,6 +79,7 @@ module Database.SQLite3.Direct (
     funcResultText,
     funcResultBlob,
     funcResultNull,
+    getFuncContextDatabase,
 
     -- * Create custom collations
     createCollation,
@@ -715,6 +716,14 @@ funcResultBlob (FuncContext ctx) value =
 funcResultNull :: FuncContext -> IO ()
 funcResultNull (FuncContext ctx) =
     c_sqlite3_result_null ctx
+
+-- | <https://www.sqlite.org/c3ref/context_db_handle.html>
+getFuncContextDatabase :: FuncContext -> IO Database
+getFuncContextDatabase (FuncContext ctx) = do
+    db <- c_sqlite3_context_db_handle ctx
+    if db == nullPtr
+        then fail $ "sqlite3_context_db_handle(" ++ show ctx ++ ") returned NULL"
+        else return (Database db)
 
 
 -- Deallocate the function pointer to the comparison function used to

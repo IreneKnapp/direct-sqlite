@@ -76,6 +76,7 @@ module Database.SQLite3 (
     funcResultText,
     funcResultBlob,
     funcResultNull,
+    getFuncContextDatabase,
 
     -- * Create custom collations
     createCollation,
@@ -140,6 +141,7 @@ import Database.SQLite3.Direct
     , funcResultDouble
     , funcResultBlob
     , funcResultNull
+    , getFuncContextDatabase
     , lastInsertRowId
     , changes
     , interrupt
