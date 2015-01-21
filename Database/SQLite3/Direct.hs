@@ -91,12 +91,22 @@ module Database.SQLite3.Direct (
     -- * Interrupting a long-running query
     interrupt,
 
+    -- * Incremental blob I/O
+    blobOpen,
+    blobClose,
+    blobReopen,
+    blobBytes,
+    blobRead,
+    blobReadBuf,
+    blobWrite,
+
     -- * Types
     Database(..),
     Statement(..),
     ColumnType(..),
     FuncContext(..),
     FuncArgs(..),
+    Blob(..),
 
     -- ** Results and errors
     StepResult(..),
@@ -208,6 +218,11 @@ newtype FuncContext = FuncContext (Ptr CContext)
 
 -- | The arguments of a custom SQL function.
 data FuncArgs = FuncArgs CArgCount (Ptr (Ptr CValue))
+
+-- | The type of blob handles used for incremental blob I/O
+data Blob = Blob Database (Ptr CBlob) -- we include the db handle to use in
+    deriving (Eq, Show)               -- error messages since it cannot
+                                      -- be retrieved any other way
 
 ------------------------------------------------------------------------
 
@@ -800,3 +815,77 @@ deleteCollation (Database db) (Utf8 name) =
 setLoadExtensionEnabled :: Database -> Bool -> IO (Either Error ())
 setLoadExtensionEnabled (Database db) enabled = do
     toResult () <$> c_sqlite3_enable_load_extension db enabled
+
+
+-- | <https://www.sqlite.org/c3ref/blob_open.html>
+--
+-- Open a blob for incremental I/O.
+blobOpen
+    :: Database
+    -> Utf8   -- ^ The symbolic name of the database (e.g. "main").
+    -> Utf8   -- ^ The table name.
+    -> Utf8   -- ^ The column name.
+    -> Int64  -- ^ The @ROWID@ of the row.
+    -> Bool   -- ^ Open the blob for read-write.
+    -> IO (Either Error Blob)
+blobOpen (Database db) (Utf8 zDb) (Utf8 zTable) (Utf8 zColumn) rowid rw =
+    BS.useAsCString zDb $ \ptrDb ->
+    BS.useAsCString zTable $ \ptrTable ->
+    BS.useAsCString zColumn $ \ptrColumn ->
+    alloca $ \ptrBlob -> do
+        c_sqlite3_blob_open db ptrDb ptrTable ptrColumn rowid flags ptrBlob
+            >>= toResultM (Blob (Database db) <$> peek ptrBlob)
+  where
+    flags = if rw then 1 else 0
+
+-- | <https://www.sqlite.org/c3ref/blob_close.html>
+blobClose :: Blob -> IO (Either Error ())
+blobClose (Blob _ blob) =
+    toResult () <$> c_sqlite3_blob_close blob
+
+-- | <https://www.sqlite.org/c3ref/blob_reopen.html>
+blobReopen :: Blob -> Int64 -> IO (Either Error ())
+blobReopen (Blob _ blob) rowid =
+    toResult () <$> c_sqlite3_blob_reopen blob rowid
+
+-- | <https://www.sqlite.org/c3ref/blob_bytes.html>
+blobBytes :: Blob -> IO Int
+blobBytes (Blob _ blob) =
+    fromIntegral <$> c_sqlite3_blob_bytes blob
+
+-- | <https://www.sqlite.org/c3ref/blob_read.html>
+blobRead
+    :: Blob
+    -> Int -- ^ Number of bytes to read.
+    -> Int -- ^ Offset within the blob.
+    -> IO (Either Error ByteString)
+blobRead blob len offset =
+    -- we do not use allocaBytes here because it deallocates its buffer
+    -- which would necessitate copying it
+    -- instead we use mallocBytes and mask to ensure both exception
+    -- safety and that the buffer is not copied any times
+    mask $ \restore -> do
+        buf <- mallocBytes len
+        r <- restore (blobReadBuf blob buf len offset)
+            `onException` (free buf)
+        case r of
+            Left err -> free buf >> return (Left err)
+            Right () -> do
+                bs <- BSU.unsafePackCStringFinalizer buf len (free buf)
+                return (Right bs)
+
+blobReadBuf :: Blob -> Ptr a -> Int -> Int -> IO (Either Error ())
+blobReadBuf (Blob _ blob) buf len offset =
+    toResult () <$>
+        c_sqlite3_blob_read blob buf (fromIntegral len) (fromIntegral offset)
+
+-- | <https://www.sqlite.org/c3ref/blob_write.html>
+blobWrite
+    :: Blob
+    -> ByteString
+    -> Int -- ^ Offset within the blob.
+    -> IO (Either Error ())
+blobWrite (Blob _ blob) bs offset =
+    BSU.unsafeUseAsCStringLen bs $ \(buf, len) ->
+        toResult () <$>
+            c_sqlite3_blob_write blob buf (fromIntegral len) (fromIntegral offset)

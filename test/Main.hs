@@ -60,6 +60,7 @@ regressionTests =
     , TestLabel "CustomFuncErr" . testCustomFunctionError
     , TestLabel "CustomAggr"    . testCustomAggragate
     , TestLabel "CustomColl"    . testCustomCollation
+    , TestLabel "IncrBlobIO"    . testIncrementalBlobIO
     ] ++
     (if rtsSupportsBoundThreads then
     [ TestLabel "Interrupt"     . testInterrupt
@@ -808,6 +809,23 @@ testCustomCollation TestEnv{..} = TestCase $ do
   where
     -- order by length first, then by lexicographical order
     cmpLen s1 s2 = compare (T.length s1) (T.length s2) <> compare s1 s2
+
+testIncrementalBlobIO :: TestEnv -> Test
+testIncrementalBlobIO TestEnv{..} = TestCase $ do
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE tbl (n BLOB)"
+    exec conn "INSERT INTO tbl(rowid,n) VALUES (1,'abcdefg')"
+    blob <- blobOpen conn "main" "tbl" "n" 1 True
+    l <- blobBytes blob
+    assertEqual "blobBytes" 7 l
+    s <- blobRead blob 4 2
+    assertEqual "blobRead" "cdef" s
+    blobWrite blob "BC" 1
+    blobClose blob
+    withStmt conn "SELECT n FROM tbl" $ \stmt -> do
+      Row <- step stmt
+      s' <- columnBlob stmt 0
+      assertEqual "blobWrite" "aBCdefg" s'
 
 testInterrupt :: TestEnv -> Test
 testInterrupt TestEnv{..} = TestCase $

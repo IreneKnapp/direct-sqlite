@@ -105,6 +105,14 @@ module Database.SQLite3.Bindings (
     c_sqlite3_wal_hook,
     CWalHook,
     mkCWalHook,
+
+    -- * Incremental blob I/O
+    c_sqlite3_blob_open,
+    c_sqlite3_blob_close,
+    c_sqlite3_blob_reopen,
+    c_sqlite3_blob_bytes,
+    c_sqlite3_blob_read,
+    c_sqlite3_blob_write,
 ) where
 
 import Database.SQLite3.Bindings.Types
@@ -454,3 +462,36 @@ type CWalHook = Ptr () -> Ptr CDatabase -> CString -> CInt -> IO CError
 
 foreign import ccall "wrapper"
     mkCWalHook :: CWalHook -> IO (FunPtr CWalHook)
+
+
+-- | <https://www.sqlite.org/c3ref/blob_open.html>
+foreign import ccall "sqlite3_blob_open"
+    c_sqlite3_blob_open
+        :: Ptr CDatabase
+        -> CString         -- ^ Database name
+        -> CString         -- ^ Table name
+        -> CString         -- ^ Column name
+        -> Int64           -- ^ Row ROWID
+        -> CInt            -- ^ Flags
+        -> Ptr (Ptr CBlob) -- ^ OUT: Blob handle, will be NULL on error
+        -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_close.html>
+foreign import ccall "sqlite3_blob_close"
+    c_sqlite3_blob_close :: Ptr CBlob -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_reopen.html>
+foreign import ccall "sqlite3_blob_reopen"
+    c_sqlite3_blob_reopen :: Ptr CBlob -> Int64 -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_bytes.html>
+foreign import ccall unsafe "sqlite3_blob_bytes"
+    c_sqlite3_blob_bytes :: Ptr CBlob -> IO CInt
+
+-- | <https://www.sqlite.org/c3ref/blob_read.html>
+foreign import ccall "sqlite3_blob_read"
+    c_sqlite3_blob_read :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_write.html>
+foreign import ccall "sqlite3_blob_write"
+    c_sqlite3_blob_write :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
