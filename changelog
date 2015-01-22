@@ -1,3 +1,23 @@
+v2.3.15
+	* Add support for the online backup API
+
+	* Add support for incremental blob I/O
+
+	* Add support for zeroblobs
+
+	* Add support for enabling/disabling the shared cache mode
+
+	* Add low-level bindings to sqlite3_wal_hook
+
+	* Add function for retrieving the db handle from a custom function
+	  context.
+
+	* Add bindings for sqlite3_errcode
+
+	* Improve Travis CI coverage to cover more GHC versions (GHC 7.4 and higher)
+
+	* Big thanks to Mario Titas and Marcin Tolysz for the above!
+
 v2.3.14
 	* Add custom functions, aggregates and collations.
 
