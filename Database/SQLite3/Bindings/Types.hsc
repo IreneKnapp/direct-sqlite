@@ -9,6 +9,8 @@ module Database.SQLite3.Bindings.Types (
     CStatement,
     CValue,
     CContext,
+    CBlob,
+    CBackup,
 
     -- * Enumerations
 
@@ -118,6 +120,16 @@ data CValue
 --
 -- @CContext@ = @sqlite3_context@
 data CContext
+
+-- | <https://www.sqlite.org/c3ref/blob.html>
+--
+-- @CBlob@ = @sqlite3_blob@
+data CBlob
+
+-- | <https://www.sqlite.org/c3ref/backup.html>
+--
+-- @CBackup@ = @sqlite3_backup@
+data CBackup
 
 -- | Index of a parameter in a parameterized query.
 -- Parameter indices start from 1.

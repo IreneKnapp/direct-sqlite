@@ -12,9 +12,11 @@ module Database.SQLite3.Direct (
     -- * Connection management
     open,
     close,
+    errcode,
     errmsg,
     setTrace,
     getAutoCommit,
+    setSharedCacheEnabled,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -44,6 +46,7 @@ module Database.SQLite3.Direct (
     bindDouble,
     bindText,
     bindBlob,
+    bindZeroBlob,
     bindNull,
 
     -- * Reading the result row
@@ -78,7 +81,9 @@ module Database.SQLite3.Direct (
     funcResultDouble,
     funcResultText,
     funcResultBlob,
+    funcResultZeroBlob,
     funcResultNull,
+    getFuncContextDatabase,
 
     -- * Create custom collations
     createCollation,
@@ -87,15 +92,36 @@ module Database.SQLite3.Direct (
     -- * Interrupting a long-running query
     interrupt,
 
+    -- * Incremental blob I/O
+    blobOpen,
+    blobClose,
+    blobReopen,
+    blobBytes,
+    blobRead,
+    blobReadBuf,
+    blobWrite,
+
+    -- * Online Backup API
+    -- | <https://www.sqlite.org/backup.html> and
+    -- <https://www.sqlite.org/c3ref/backup_finish.html>
+    backupInit,
+    backupFinish,
+    backupStep,
+    backupRemaining,
+    backupPagecount,
+
     -- * Types
     Database(..),
     Statement(..),
     ColumnType(..),
     FuncContext(..),
     FuncArgs(..),
+    Blob(..),
+    Backup(..),
 
     -- ** Results and errors
     StepResult(..),
+    BackupStepResult(..),
     Error(..),
 
     -- ** Special types
@@ -134,6 +160,11 @@ newtype Statement = Statement (Ptr CStatement)
 data StepResult
     = Row
     | Done
+    deriving (Eq, Show)
+
+data BackupStepResult
+    = BackupOK   -- ^ There are still more pages to be copied.
+    | BackupDone -- ^ All pages were successfully copied.
     deriving (Eq, Show)
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
@@ -198,12 +229,30 @@ toStepResult code =
         ErrorDone -> Right Done
         err       -> Left err
 
+toBackupStepResult :: CError -> Result BackupStepResult
+toBackupStepResult code =
+    case decodeError code of
+        ErrorOK   -> Right BackupOK
+        ErrorDone -> Right BackupDone
+        err       -> Left err
+
 -- | The context in which a custom SQL function is executed.
 newtype FuncContext = FuncContext (Ptr CContext)
     deriving (Eq, Show)
 
 -- | The arguments of a custom SQL function.
 data FuncArgs = FuncArgs CArgCount (Ptr (Ptr CValue))
+
+-- | The type of blob handles used for incremental blob I/O
+data Blob = Blob Database (Ptr CBlob) -- we include the db handle to use in
+    deriving (Eq, Show)               -- error messages since it cannot
+                                      -- be retrieved any other way
+
+-- | A handle for an online backup process.
+data Backup = Backup Database (Ptr CBackup)
+    deriving (Eq, Show)
+-- we include the destination db handle to use in error messages since
+-- it cannot be retrieved any other way
 
 ------------------------------------------------------------------------
 
@@ -243,6 +292,11 @@ close (Database db) =
 interrupt :: Database -> IO ()
 interrupt (Database db) =
     c_sqlite3_interrupt db
+
+-- | <http://www.sqlite.org/c3ref/errcode.html>
+errcode :: Database -> IO Error
+errcode (Database db) =
+    decodeError <$> c_sqlite3_errcode db
 
 -- | <http://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
@@ -368,6 +422,16 @@ getAutoCommit :: Database -> IO Bool
 getAutoCommit (Database db) =
     (/= 0) <$> c_sqlite3_get_autocommit db
 
+
+-- | <https://www.sqlite.org/c3ref/enable_shared_cache.html>
+--
+-- Enable or disable shared cache for all future connections.
+setSharedCacheEnabled :: Bool -> IO (Either Error ())
+setSharedCacheEnabled val =
+    toResult () <$> c_sqlite3_enable_shared_cache
+        (if val then 1 else 0)
+
+
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
 -- If the query contains no SQL statements, this returns
@@ -482,6 +546,11 @@ bindBlob (Statement stmt) idx value =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         toResult () <$>
             c_sqlite3_bind_blob stmt (toFFI idx) ptr len c_SQLITE_TRANSIENT
+
+bindZeroBlob :: Statement -> ParamIndex -> Int -> IO (Either Error ())
+bindZeroBlob (Statement stmt) idx len =
+    toResult () <$>
+        c_sqlite3_bind_zeroblob stmt (toFFI idx) (fromIntegral len)
 
 bindNull :: Statement -> ParamIndex -> IO (Either Error ())
 bindNull (Statement stmt) idx =
@@ -712,9 +781,21 @@ funcResultBlob (FuncContext ctx) value =
     unsafeUseAsCStringLenNoNull value $ \ptr len ->
         c_sqlite3_result_blob ctx ptr len c_SQLITE_TRANSIENT
 
+funcResultZeroBlob :: FuncContext -> Int -> IO ()
+funcResultZeroBlob (FuncContext ctx) len =
+    c_sqlite3_result_zeroblob ctx (fromIntegral len)
+
 funcResultNull :: FuncContext -> IO ()
 funcResultNull (FuncContext ctx) =
     c_sqlite3_result_null ctx
+
+-- | <https://www.sqlite.org/c3ref/context_db_handle.html>
+getFuncContextDatabase :: FuncContext -> IO Database
+getFuncContextDatabase (FuncContext ctx) = do
+    db <- c_sqlite3_context_db_handle ctx
+    if db == nullPtr
+        then fail $ "sqlite3_context_db_handle(" ++ show ctx ++ ") returned NULL"
+        else return (Database db)
 
 
 -- Deallocate the function pointer to the comparison function used to
@@ -769,3 +850,110 @@ deleteCollation (Database db) (Utf8 name) =
 setLoadExtensionEnabled :: Database -> Bool -> IO (Either Error ())
 setLoadExtensionEnabled (Database db) enabled = do
     toResult () <$> c_sqlite3_enable_load_extension db enabled
+
+
+-- | <https://www.sqlite.org/c3ref/blob_open.html>
+--
+-- Open a blob for incremental I/O.
+blobOpen
+    :: Database
+    -> Utf8   -- ^ The symbolic name of the database (e.g. "main").
+    -> Utf8   -- ^ The table name.
+    -> Utf8   -- ^ The column name.
+    -> Int64  -- ^ The @ROWID@ of the row.
+    -> Bool   -- ^ Open the blob for read-write.
+    -> IO (Either Error Blob)
+blobOpen (Database db) (Utf8 zDb) (Utf8 zTable) (Utf8 zColumn) rowid rw =
+    BS.useAsCString zDb $ \ptrDb ->
+    BS.useAsCString zTable $ \ptrTable ->
+    BS.useAsCString zColumn $ \ptrColumn ->
+    alloca $ \ptrBlob -> do
+        c_sqlite3_blob_open db ptrDb ptrTable ptrColumn rowid flags ptrBlob
+            >>= toResultM (Blob (Database db) <$> peek ptrBlob)
+  where
+    flags = if rw then 1 else 0
+
+-- | <https://www.sqlite.org/c3ref/blob_close.html>
+blobClose :: Blob -> IO (Either Error ())
+blobClose (Blob _ blob) =
+    toResult () <$> c_sqlite3_blob_close blob
+
+-- | <https://www.sqlite.org/c3ref/blob_reopen.html>
+blobReopen :: Blob -> Int64 -> IO (Either Error ())
+blobReopen (Blob _ blob) rowid =
+    toResult () <$> c_sqlite3_blob_reopen blob rowid
+
+-- | <https://www.sqlite.org/c3ref/blob_bytes.html>
+blobBytes :: Blob -> IO Int
+blobBytes (Blob _ blob) =
+    fromIntegral <$> c_sqlite3_blob_bytes blob
+
+-- | <https://www.sqlite.org/c3ref/blob_read.html>
+blobRead
+    :: Blob
+    -> Int -- ^ Number of bytes to read.
+    -> Int -- ^ Offset within the blob.
+    -> IO (Either Error ByteString)
+blobRead blob len offset =
+    -- we do not use allocaBytes here because it deallocates its buffer
+    -- which would necessitate copying it
+    -- instead we use mallocBytes and mask to ensure both exception
+    -- safety and that the buffer is not copied any times
+    mask $ \restore -> do
+        buf <- mallocBytes len
+        r <- restore (blobReadBuf blob buf len offset)
+            `onException` (free buf)
+        case r of
+            Left err -> free buf >> return (Left err)
+            Right () -> do
+                bs <- BSU.unsafePackCStringFinalizer buf len (free buf)
+                return (Right bs)
+
+blobReadBuf :: Blob -> Ptr a -> Int -> Int -> IO (Either Error ())
+blobReadBuf (Blob _ blob) buf len offset =
+    toResult () <$>
+        c_sqlite3_blob_read blob buf (fromIntegral len) (fromIntegral offset)
+
+-- | <https://www.sqlite.org/c3ref/blob_write.html>
+blobWrite
+    :: Blob
+    -> ByteString
+    -> Int -- ^ Offset within the blob.
+    -> IO (Either Error ())
+blobWrite (Blob _ blob) bs offset =
+    BSU.unsafeUseAsCStringLen bs $ \(buf, len) ->
+        toResult () <$>
+            c_sqlite3_blob_write blob buf (fromIntegral len) (fromIntegral offset)
+
+
+backupInit
+    :: Database  -- ^ Destination database handle
+    -> Utf8      -- ^ Destination database name
+    -> Database  -- ^ Source database handle
+    -> Utf8      -- ^ Source database name
+    -> IO (Either Error Backup)
+backupInit (Database dstDb) (Utf8 dstName) (Database srcDb) (Utf8 srcName) =
+    BS.useAsCString dstName $ \dstName' ->
+    BS.useAsCString srcName $ \srcName' -> do
+        r <- c_sqlite3_backup_init dstDb dstName' srcDb srcName'
+        if r == nullPtr
+            then Left <$> errcode (Database dstDb)
+            else return (Right (Backup (Database dstDb) r))
+
+backupFinish :: Backup -> IO (Either Error ())
+backupFinish (Backup _ backup) =
+    toResult () <$>
+        c_sqlite3_backup_finish backup
+
+backupStep :: Backup -> Int -> IO (Either Error BackupStepResult)
+backupStep (Backup _ backup) pages =
+    toBackupStepResult <$>
+        c_sqlite3_backup_step backup (fromIntegral pages)
+
+backupRemaining :: Backup -> IO Int
+backupRemaining (Backup _ backup) =
+    fromIntegral <$> c_sqlite3_backup_remaining backup
+
+backupPagecount :: Backup -> IO Int
+backupPagecount (Backup _ backup) =
+    fromIntegral <$> c_sqlite3_backup_pagecount backup

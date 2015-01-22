@@ -38,6 +38,7 @@ module Database.SQLite3 (
     bindDouble,
     bindText,
     bindBlob,
+    bindZeroBlob,
     bindNull,
 
     -- * Reading the result row
@@ -75,7 +76,9 @@ module Database.SQLite3 (
     funcResultDouble,
     funcResultText,
     funcResultBlob,
+    funcResultZeroBlob,
     funcResultNull,
+    getFuncContextDatabase,
 
     -- * Create custom collations
     createCollation,
@@ -85,6 +88,24 @@ module Database.SQLite3 (
     interrupt,
     interruptibly,
 
+    -- * Incremental blob I/O
+    blobOpen,
+    blobClose,
+    blobReopen,
+    blobBytes,
+    blobRead,
+    blobReadBuf,
+    blobWrite,
+
+    -- * Online Backup API
+    -- | <https://www.sqlite.org/backup.html> and
+    -- <https://www.sqlite.org/c3ref/backup_finish.html>
+    backupInit,
+    backupFinish,
+    backupStep,
+    backupRemaining,
+    backupPagecount,
+
     -- * Types
     Database,
     Statement,
@@ -93,9 +114,12 @@ module Database.SQLite3 (
     ColumnType(..),
     FuncContext,
     FuncArgs,
+    Blob,
+    Backup,
 
     -- ** Results and errors
     StepResult(..),
+    BackupStepResult(..),
     Error(..),
 
     -- ** Special integers
@@ -111,6 +135,7 @@ import Database.SQLite3.Direct
     , Statement
     , ColumnType(..)
     , StepResult(..)
+    , BackupStepResult(..)
     , Error(..)
     , ParamIndex(..)
     , ColumnIndex(..)
@@ -120,6 +145,8 @@ import Database.SQLite3.Direct
     , FuncArgs
     , ArgCount(..)
     , ArgIndex
+    , Blob
+    , Backup
 
     -- Re-exported from Database.SQLite3.Direct without modification.
     -- Note that if this module were in another package, source links would not
@@ -139,10 +166,15 @@ import Database.SQLite3.Direct
     , funcResultInt64
     , funcResultDouble
     , funcResultBlob
+    , funcResultZeroBlob
     , funcResultNull
+    , getFuncContextDatabase
     , lastInsertRowId
     , changes
     , interrupt
+    , blobBytes
+    , backupRemaining
+    , backupPagecount
     )
 
 import qualified Database.SQLite3.Direct as Direct
@@ -161,6 +193,7 @@ import Data.Text            (Text)
 import Data.Text.Encoding   (encodeUtf8, decodeUtf8With)
 import Data.Text.Encoding.Error (UnicodeException(..), lenientDecode)
 import Data.Typeable
+import Foreign.Ptr          (Ptr)
 
 data SQLData
     = SQLInteger    !Int64
@@ -464,6 +497,11 @@ bindBlob statement parameterIndex byteString =
     Direct.bindBlob statement parameterIndex byteString
         >>= checkError (DetailStatement statement) "bind blob"
 
+bindZeroBlob :: Statement -> ParamIndex -> Int -> IO ()
+bindZeroBlob statement parameterIndex len =
+    Direct.bindZeroBlob statement parameterIndex len
+        >>= checkError (DetailStatement statement) "bind zeroblob"
+
 bindDouble :: Statement -> ParamIndex -> Double -> IO ()
 bindDouble statement parameterIndex datum =
     Direct.bindDouble statement parameterIndex datum
@@ -669,3 +707,79 @@ deleteCollation :: Database -> Text -> IO ()
 deleteCollation db name =
     Direct.deleteCollation db (toUtf8 name)
         >>= checkError (DetailDatabase db) ("deleteCollation " `appendShow` name)
+
+
+-- | <https://www.sqlite.org/c3ref/blob_open.html>
+--
+-- Open a blob for incremental I/O.
+blobOpen
+    :: Database
+    -> Text   -- ^ The symbolic name of the database (e.g. "main").
+    -> Text   -- ^ The table name.
+    -> Text   -- ^ The column name.
+    -> Int64  -- ^ The @ROWID@ of the row.
+    -> Bool   -- ^ Open the blob for read-write.
+    -> IO Blob
+blobOpen db zDb zTable zColumn rowid rw =
+    Direct.blobOpen db (toUtf8 zDb) (toUtf8 zTable) (toUtf8 zColumn) rowid rw
+        >>= checkError (DetailDatabase db) "blobOpen"
+
+-- | <https://www.sqlite.org/c3ref/blob_close.html>
+blobClose :: Blob -> IO ()
+blobClose blob@(Direct.Blob db _) =
+    Direct.blobClose blob
+        >>= checkError (DetailDatabase db) "blobClose"
+
+-- | <https://www.sqlite.org/c3ref/blob_reopen.html>
+blobReopen :: Blob -> Int64 -> IO ()
+blobReopen blob@(Direct.Blob db _) rowid =
+    Direct.blobReopen blob rowid
+        >>= checkError (DetailDatabase db) "blobReopen"
+
+-- | <https://www.sqlite.org/c3ref/blob_read.html>
+blobRead
+    :: Blob
+    -> Int -- ^ Number of bytes to read.
+    -> Int -- ^ Offset within the blob.
+    -> IO ByteString
+blobRead blob@(Direct.Blob db _) len offset =
+    Direct.blobRead blob len offset
+        >>= checkError (DetailDatabase db) "blobRead"
+
+blobReadBuf :: Blob -> Ptr a -> Int -> Int -> IO ()
+blobReadBuf blob@(Direct.Blob db _) buf len offset =
+    Direct.blobReadBuf blob buf len offset
+        >>= checkError (DetailDatabase db) "blobReadBuf"
+
+-- | <https://www.sqlite.org/c3ref/blob_write.html>
+blobWrite
+    :: Blob
+    -> ByteString
+    -> Int -- ^ Offset within the blob.
+    -> IO ()
+blobWrite blob@(Direct.Blob db _) bs offset =
+    Direct.blobWrite blob bs offset
+        >>= checkError (DetailDatabase db) "blobWrite"
+
+
+backupInit
+    :: Database  -- ^ Destination database handle
+    -> Text      -- ^ Destination database name
+    -> Database  -- ^ Source database handle
+    -> Text      -- ^ Source database name
+    -> IO Backup
+backupInit dstDb dstName srcDb srcName =
+    Direct.backupInit dstDb (toUtf8 dstName) srcDb (toUtf8 srcName)
+        >>= checkError (DetailDatabase dstDb) "backupInit"
+
+backupFinish :: Backup -> IO (())
+backupFinish backup@(Direct.Backup dstDb _) =
+    Direct.backupFinish backup
+        >>= checkError (DetailDatabase dstDb) "backupFinish"
+
+backupStep :: Backup -> Int -> IO BackupStepResult
+backupStep backup pages =
+    Direct.backupStep backup pages
+        -- it appears that sqlite does not generate an
+        -- error message when sqlite3_backup_step fails
+        >>= checkError (DetailMessage "failed") "backupStep"

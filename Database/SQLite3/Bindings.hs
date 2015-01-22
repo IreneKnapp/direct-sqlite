@@ -5,12 +5,14 @@ module Database.SQLite3.Bindings (
     -- * Connection management
     c_sqlite3_open,
     c_sqlite3_close,
+    c_sqlite3_errcode,
     c_sqlite3_errmsg,
     c_sqlite3_interrupt,
     c_sqlite3_trace,
     CTraceCallback,
     mkCTraceCallback,
     c_sqlite3_get_autocommit,
+    c_sqlite3_enable_shared_cache,
 
     -- * Simple query execution
     -- | <http://sqlite.org/c3ref/exec.html>
@@ -37,6 +39,7 @@ module Database.SQLite3.Bindings (
     -- * Binding Values To Prepared Statements
     -- | <http://www.sqlite.org/c3ref/bind_blob.html>
     c_sqlite3_bind_blob,
+    c_sqlite3_bind_zeroblob,
     c_sqlite3_bind_text,
     c_sqlite3_bind_double,
     c_sqlite3_bind_int64,
@@ -97,7 +100,29 @@ module Database.SQLite3.Bindings (
     c_sqlite3_free,
 
     -- * Extensions
-    c_sqlite3_enable_load_extension
+    c_sqlite3_enable_load_extension,
+
+    -- * Write-Ahead Log Commit Hook
+    c_sqlite3_wal_hook,
+    CWalHook,
+    mkCWalHook,
+
+    -- * Incremental blob I/O
+    c_sqlite3_blob_open,
+    c_sqlite3_blob_close,
+    c_sqlite3_blob_reopen,
+    c_sqlite3_blob_bytes,
+    c_sqlite3_blob_read,
+    c_sqlite3_blob_write,
+
+    -- * Online Backup API
+    -- | <https://www.sqlite.org/backup.html> and
+    -- <https://www.sqlite.org/c3ref/backup_finish.html>
+    c_sqlite3_backup_init,
+    c_sqlite3_backup_finish,
+    c_sqlite3_backup_step,
+    c_sqlite3_backup_remaining,
+    c_sqlite3_backup_pagecount,
 ) where
 
 import Database.SQLite3.Bindings.Types
@@ -115,6 +140,10 @@ foreign import ccall "sqlite3_open"
 -- | <http://www.sqlite.org/c3ref/close.html>
 foreign import ccall "sqlite3_close"
     c_sqlite3_close :: Ptr CDatabase -> IO CError
+
+-- | <http://www.sqlite.org/c3ref/errcode.html>
+foreign import ccall "sqlite3_errcode"
+    c_sqlite3_errcode :: Ptr CDatabase -> IO CError
 
 -- | <http://www.sqlite.org/c3ref/errcode.html>
 foreign import ccall "sqlite3_errmsg"
@@ -136,6 +165,10 @@ foreign import ccall "sqlite3_trace"
 -- | <http://www.sqlite.org/c3ref/get_autocommit.html>
 foreign import ccall unsafe "sqlite3_get_autocommit"
     c_sqlite3_get_autocommit :: Ptr CDatabase -> IO CInt
+
+-- | <https://www.sqlite.org/c3ref/enable_shared_cache.html>
+foreign import ccall unsafe "sqlite3_enable_shared_cache"
+    c_sqlite3_enable_shared_cache :: CInt -> IO CError
 
 
 foreign import ccall "sqlite3_exec"
@@ -263,6 +296,10 @@ foreign import ccall unsafe "sqlite3_bind_blob"
         -> CNumBytes        -- ^ Length, in bytes.  This must not be negative.
         -> Ptr CDestructor
         -> IO CError
+
+foreign import ccall unsafe "sqlite3_bind_zeroblob"
+    c_sqlite3_bind_zeroblob
+        :: Ptr CStatement -> CParamIndex -> CInt -> IO CError
 
 foreign import ccall unsafe "sqlite3_bind_text"
     c_sqlite3_bind_text
@@ -429,3 +466,67 @@ foreign import ccall "sqlite3_free"
 -- | <http://sqlite.org/c3ref/enable_load_extension.html>
 foreign import ccall "sqlite3_enable_load_extension"
     c_sqlite3_enable_load_extension :: Ptr CDatabase -> Bool -> IO CError
+
+
+-- | <https://www.sqlite.org/c3ref/wal_hook.html>
+foreign import ccall unsafe "sqlite3_wal_hook"
+    c_sqlite3_wal_hook :: Ptr CDatabase -> FunPtr CWalHook -> Ptr a -> IO (Ptr ())
+
+type CWalHook = Ptr () -> Ptr CDatabase -> CString -> CInt -> IO CError
+
+foreign import ccall "wrapper"
+    mkCWalHook :: CWalHook -> IO (FunPtr CWalHook)
+
+
+-- | <https://www.sqlite.org/c3ref/blob_open.html>
+foreign import ccall "sqlite3_blob_open"
+    c_sqlite3_blob_open
+        :: Ptr CDatabase
+        -> CString         -- ^ Database name
+        -> CString         -- ^ Table name
+        -> CString         -- ^ Column name
+        -> Int64           -- ^ Row ROWID
+        -> CInt            -- ^ Flags
+        -> Ptr (Ptr CBlob) -- ^ OUT: Blob handle, will be NULL on error
+        -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_close.html>
+foreign import ccall "sqlite3_blob_close"
+    c_sqlite3_blob_close :: Ptr CBlob -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_reopen.html>
+foreign import ccall "sqlite3_blob_reopen"
+    c_sqlite3_blob_reopen :: Ptr CBlob -> Int64 -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_bytes.html>
+foreign import ccall unsafe "sqlite3_blob_bytes"
+    c_sqlite3_blob_bytes :: Ptr CBlob -> IO CInt
+
+-- | <https://www.sqlite.org/c3ref/blob_read.html>
+foreign import ccall "sqlite3_blob_read"
+    c_sqlite3_blob_read :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/blob_write.html>
+foreign import ccall "sqlite3_blob_write"
+    c_sqlite3_blob_write :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
+
+
+foreign import ccall "sqlite3_backup_init"
+    c_sqlite3_backup_init
+        :: Ptr CDatabase  -- ^ Destination database handle
+        -> CString        -- ^ Destination database name
+        -> Ptr CDatabase  -- ^ Source database handle
+        -> CString        -- ^ Source database name
+        -> IO (Ptr CBackup)
+
+foreign import ccall "sqlite3_backup_finish"
+    c_sqlite3_backup_finish :: Ptr CBackup -> IO CError
+
+foreign import ccall "sqlite3_backup_step"
+    c_sqlite3_backup_step :: Ptr CBackup -> CInt -> IO CError
+
+foreign import ccall unsafe "sqlite3_backup_remaining"
+    c_sqlite3_backup_remaining :: Ptr CBackup -> IO CInt
+
+foreign import ccall unsafe "sqlite3_backup_pagecount"
+    c_sqlite3_backup_pagecount :: Ptr CBackup -> IO CInt
