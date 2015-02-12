@@ -215,7 +215,7 @@ data SQLError = SQLError
         -- ^ Indicates what action produced this error,
         --   e.g. @exec \"SELECT * FROM foo\"@
     }
-    deriving Typeable
+    deriving (Eq, Typeable)
 
 -- NB: SQLError is lazy in 'sqlErrorDetails' and 'sqlErrorContext',
 -- to defer message construction in the case where a user catches and
@@ -391,11 +391,11 @@ type ExecCallback
 -- If the query string contains no SQL statements, this 'fail's.
 prepare :: Database -> Text -> IO Statement
 prepare db sql = prepareUtf8 db (toUtf8 sql)
-        
+
 -- | <http://www.sqlite.org/c3ref/prepare.html>
 --
 -- It can help to avoid redundant Utf8 to Text conversion if you already
--- have Utf8 
+-- have Utf8
 --
 -- If the query string contains no SQL statements, this 'fail's.
 prepareUtf8 :: Database -> Utf8 -> IO Statement
@@ -617,7 +617,7 @@ typedColumn theType statement idx = case theType of
 
 -- |
 -- This avoids extra API calls using the list of column types.
--- If passed types do not correspond to the actual types, the values will be 
+-- If passed types do not correspond to the actual types, the values will be
 -- converted according to the rules at <http://www.sqlite.org/c3ref/column_blob.html>.
 -- If the list contains more items that number of columns, the result is undefined.
 typedColumns :: Statement -> [Maybe ColumnType] -> IO [SQLData]
