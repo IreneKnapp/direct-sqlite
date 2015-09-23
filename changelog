@@ -1,3 +1,6 @@
+v2.3.16
+	* Add an Eq instance for SQLError
+
 v2.3.15
 	* Add support for the online backup API
 
