@@ -1,3 +1,8 @@
+v2.3.17
+	* Use a randomly created temp file for test database when running
+	unit tests instead of a hardcoded file under 'dist/'.  Hopefully
+	fixes https://github.com/IreneKnapp/direct-sqlite/issues/60
+
 v2.3.16
 	* Add an Eq instance for SQLError
 
