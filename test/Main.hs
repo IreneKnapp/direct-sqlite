@@ -14,6 +14,7 @@ import System.Directory
 import System.Exit          (exitFailure)
 import System.IO
 import System.IO.Error      (isDoesNotExistError, isUserError)
+import System.IO.Temp       (withTempFile)
 import System.Timeout       (timeout)
 import Test.HUnit
 
@@ -875,16 +876,13 @@ testMultiRowInsert TestEnv{..} = TestCase $ do
           return ()
 
 
-sharedDBPath :: Text
-sharedDBPath = "dist/test/direct-sqlite-test-database.db"
-
-withTestEnv :: (TestEnv -> IO a) -> IO a
-withTestEnv cb =
+withTestEnv :: String -> (TestEnv -> IO a) -> IO a
+withTestEnv tempDbName cb =
     withConn $ \conn ->
         cb TestEnv
             { conn           = conn
             , withConn       = withConn
-            , withConnShared = withConnPath sharedDBPath
+            , withConnShared = withConnPath (T.pack tempDbName)
             }
   where
     withConn = withConnPath ":memory:"
@@ -898,28 +896,20 @@ withTestEnv cb =
       close conn
       return r
 
-runTestGroup :: [TestEnv -> Test] -> IO Bool
-runTestGroup tests = do
+runTestGroup :: String -> [TestEnv -> Test] -> IO Bool
+runTestGroup tempDbName tests = do
   Counts{cases, tried, errors, failures} <-
-    withTestEnv $ \env -> runTestTT $ TestList $ map ($ env) tests
+    withTestEnv tempDbName $ \env -> runTestTT $ TestList $ map ($ env) tests
   return (cases == tried && errors == 0 && failures == 0)
 
 main :: IO ()
 main = do
   mapM_ (`hSetBuffering` LineBuffering) [stdout, stderr]
-
-  T.putStrLn $ "Creating " `T.append` sharedDBPath
-  handleJust (\e -> if isDoesNotExistError e
-                       then Just ()
-                       else Nothing)
-             (\_ -> return ())
-             (removeFile $ T.unpack sharedDBPath)
-  open sharedDBPath >>= close
-
-  ok <- runTestGroup regressionTests
-  when (not ok) exitFailure
-
-  -- Signal failure if feature tests fail.  I'd rather print a noisy warning
-  -- instead, but cabal redirects test output to log files by default.
-  ok <- runTestGroup featureTests
-  when (not ok) exitFailure
+  withTempFile "." "direct-sqlite-test-database" $ \tempDbName _hFile -> do
+    open (T.pack tempDbName) >>= close
+    ok <- runTestGroup tempDbName regressionTests
+    when (not ok) exitFailure
+    -- Signal failure if feature tests fail.  I'd rather print a noisy warning
+    -- instead, but cabal redirects test output to log files by default.
+    ok <- runTestGroup tempDbName featureTests
+    when (not ok) exitFailure
