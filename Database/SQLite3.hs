@@ -5,6 +5,7 @@
 module Database.SQLite3 (
     -- * Connection management
     open,
+    open2,
     close,
 
     -- * Simple query execution
@@ -111,6 +112,8 @@ module Database.SQLite3 (
     Database,
     Statement,
     SQLData(..),
+    SQLOpenFlag(..),
+    SQLVFS(..),
     SQLError(..),
     ColumnType(..),
     FuncContext,
@@ -188,6 +191,7 @@ import Control.Exception
 import Control.Monad        (when, zipWithM, zipWithM_)
 import Data.ByteString      (ByteString)
 import Data.Int             (Int64)
+import Data.Bits            ((.|.))
 import Data.Maybe           (fromMaybe)
 import Data.Text            (Text)
 import Data.Text.Encoding   (encodeUtf8, decodeUtf8With)
@@ -203,6 +207,43 @@ data SQLData
     | SQLBlob       !ByteString
     | SQLNull
     deriving (Eq, Show, Typeable, Generic)
+
+-- | These flags are used when using the `open2` function.
+-- <https://www.sqlite.org/c3ref/c_open_autoproxy.html>
+data SQLOpenFlag
+    = SQLOpenReadOnly      -- Ok for sqlite3_open_v2()
+    | SQLOpenReadWrite     -- Ok for sqlite3_open_v2()
+    | SQLOpenCreate        -- Ok for sqlite3_open_v2()
+    | SQLOpenDeleteOnClose -- VFS only
+    | SQLOpenExclusive     -- VFS only
+    | SQLOpenAutoProxy     -- VFS only
+    | SQLOpenURI           -- Ok for sqlite3_open_v2()
+    | SQLOpenMemory        -- Ok for sqlite3_open_v2()
+    | SQLOpenMainDB        -- VFS only
+    | SQLOpenTempDB        -- VFS only
+    | SQLOpenTransientDB   -- VFS only
+    | SQLOpenMainJournal   -- VFS only
+    | SQLOpenTempJournal   -- VFS only
+    | SQLOpenSubJournal    -- VFS only
+    | SQLOpenMasterJournal -- VFS only
+    | SQLOpenNoMutex       -- Ok for sqlite3_open_v2()
+    | SQLOpenFullMutex     -- Ok for sqlite3_open_v2()
+    | SQLOpenSharedCache   -- Ok for sqlite3_open_v2()
+    | SQLOpenPrivateCache  -- Ok for sqlite3_open_v2()
+    | SQLOpenWAL           -- VFS only
+    | SQLOpenNoFollow      -- Ok for sqlite3_open_v2()
+    deriving (Eq, Show)
+
+-- | These VFS names are used when using the `open2` function.
+data SQLVFS
+    = SQLVFSDefault
+    | SQLVFSUnix
+    | SQLVFSUnixDotFile
+    | SQLVFSUnixExcl
+    | SQLVFSUnixNone
+    | SQLVFSUnixNamedSem
+    | SQLVFSCustom Text
+    deriving (Eq, Show)
 
 -- | Exception thrown when SQLite3 reports an error.
 --
@@ -290,6 +331,46 @@ open :: Text -> IO Database
 open path =
     Direct.open (toUtf8 path)
         >>= checkErrorMsg ("open " `appendShow` path)
+
+-- | <https://www.sqlite.org/c3ref/open.html>
+open2 :: Text -> [SQLOpenFlag] -> SQLVFS -> IO Database
+open2 path flags zvfs =
+    Direct.open2 (toUtf8 path) (makeFlag flags) (toMUtf8 zvfs)
+        >>= checkErrorMsg ("open2 " `appendShow` path)
+    where
+        toMUtf8 = fmap toUtf8 . toMText
+
+        toMText SQLVFSDefault           = Nothing
+        toMText SQLVFSUnix              = Just "unix"
+        toMText SQLVFSUnixDotFile       = Just "unix-dotfile"
+        toMText SQLVFSUnixExcl          = Just "unix-excl"
+        toMText SQLVFSUnixNone          = Just "unix-none"
+        toMText SQLVFSUnixNamedSem      = Just "unix-namedsem"
+        toMText (SQLVFSCustom custom)   = Just custom
+
+        makeFlag = foldr (.|.) 0 . fmap toNum
+
+        toNum SQLOpenReadOnly       = 0x00000001
+        toNum SQLOpenReadWrite      = 0x00000002
+        toNum SQLOpenCreate         = 0x00000004
+        toNum SQLOpenDeleteOnClose  = 0x00000008
+        toNum SQLOpenExclusive      = 0x00000010
+        toNum SQLOpenAutoProxy      = 0x00000020
+        toNum SQLOpenURI            = 0x00000040
+        toNum SQLOpenMemory         = 0x00000080
+        toNum SQLOpenMainDB         = 0x00000100
+        toNum SQLOpenTempDB         = 0x00000200
+        toNum SQLOpenTransientDB    = 0x00000400
+        toNum SQLOpenMainJournal    = 0x00000800
+        toNum SQLOpenTempJournal    = 0x00001000
+        toNum SQLOpenSubJournal     = 0x00002000
+        toNum SQLOpenMasterJournal  = 0x00004000
+        toNum SQLOpenNoMutex        = 0x00008000
+        toNum SQLOpenFullMutex      = 0x00010000
+        toNum SQLOpenSharedCache    = 0x00020000
+        toNum SQLOpenPrivateCache   = 0x00040000
+        toNum SQLOpenWAL            = 0x00080000
+        toNum SQLOpenNoFollow       = 0x01000000
 
 -- | <https://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO ()
