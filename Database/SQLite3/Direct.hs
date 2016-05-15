@@ -11,6 +11,7 @@
 module Database.SQLite3.Direct (
     -- * Connection management
     open,
+    open2,
     close,
     errcode,
     errmsg,
@@ -274,6 +275,30 @@ open (Utf8 path) =
                 if db == Database nullPtr
                     then fail "sqlite3_open unexpectedly returned NULL"
                     else return $ Right db
+
+-- | <http://www.sqlite.org/c3ref/open_v2.html>
+open2 :: Utf8 -> Int -> Maybe Utf8 -> IO (Either (Error, Utf8) Database)
+open2 (Utf8 path) flags mzvfs =
+    BS.useAsCString path $ \path' ->
+    useAsMaybeCString mzvfs $ \zvfs' ->
+    alloca $ \database -> do
+        rc <- c_sqlite3_open_v2 path' database (toEnum flags) zvfs'
+        db <- Database <$> peek database
+            -- sqlite3_open_v2 returns a sqlite3 even on failure.
+            -- That's where we get a more descriptive error message.
+        case toResult () rc of
+            Left err -> do
+                msg <- errmsg db -- This returns "out of memory" if db is null.
+                _   <- close db  -- This is harmless if db is null.
+                return $ Left (err, msg)
+            Right () ->
+                if db == Database nullPtr
+                    then fail "sqlite3_open unexpectedly returned NULL"
+                    else return $ Right db
+
+    where useAsMaybeCString :: Maybe Utf8 -> (CString -> IO a) -> IO a
+          useAsMaybeCString (Just (Utf8 zvfs)) f = BS.useAsCString zvfs f
+          useAsMaybeCString _ f = f nullPtr
 
 -- | <http://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())

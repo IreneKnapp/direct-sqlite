@@ -107,3 +107,31 @@ test-suite test
                , direct-sqlite
                , temporary
                , text
+
+test-suite test2
+  type:           exitcode-stdio-1.0
+
+  hs-source-dirs: test
+  main-is:        Main2.hs
+  other-modules:
+    StrictEq
+
+  ghc-options: -Wall -threaded -fno-warn-name-shadowing -fno-warn-unused-do-bind
+
+  default-language: Haskell2010
+
+  default-extensions: DeriveDataTypeable
+                    , NamedFieldPuns
+                    , OverloadedStrings
+                    , Rank2Types
+                    , RecordWildCards
+                    , ScopedTypeVariables
+
+  build-depends: base
+               , base16-bytestring
+               , bytestring
+               , directory
+               , HUnit
+               , direct-sqlite
+               , temporary
+               , text
