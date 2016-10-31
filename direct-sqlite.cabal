@@ -1,5 +1,5 @@
 name: direct-sqlite
-version: 2.3.17
+version: 2.3.18
 build-type: Simple
 license: BSD3
 license-file: LICENSE

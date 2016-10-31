@@ -1,3 +1,9 @@
+v2.3.18
+	* Upgrade embedded sqlite3 library to 3.15.0.
+
+	* Fix regressions in the test suite that were either introduced by changes
+	  in GHC 8 and/or stuff we missed in previous releases.
+
 v2.3.17
 	* Use a randomly created temp file for test database when running
 	unit tests instead of a hardcoded file under 'dist/'.  Hopefully
