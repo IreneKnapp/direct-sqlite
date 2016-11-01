@@ -10,10 +10,10 @@ import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
 import Data.Typeable
 import Data.Monoid
-import System.Directory
+import System.Directory     ()
 import System.Exit          (exitFailure)
 import System.IO
-import System.IO.Error      (isDoesNotExistError, isUserError)
+import System.IO.Error      (isUserError)
 import System.IO.Temp       (withTempFile)
 import System.Timeout       (timeout)
 import Test.HUnit
@@ -22,7 +22,6 @@ import qualified Data.ByteString        as B
 import qualified Data.ByteString.Char8  as B8
 import qualified Data.Text              as T
 import qualified Data.Text.Encoding     as T
-import qualified Data.Text.IO           as T
 
 data TestEnv =
   TestEnv {
@@ -697,9 +696,8 @@ testResultStats TestEnv{..} = TestCase $
     (_, 2, 6) <- stats conn
     Left SQLError{ sqlError = ErrorConstraint }
       <- try $ exec conn "UPDATE tbl SET rowid=4"
-    (_, 1, 7) <- stats conn -- quirky behavior
     exec conn "DELETE FROM tbl"
-    (_, 4, 11) <- stats conn
+    (_, 4, 10) <- stats conn
     return ()
   where
     stats conn =
@@ -761,8 +759,11 @@ testCustomFunctionError TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
     createFunction conn "fail" (Just 0) True throwError
     Left SQLError{..} <- try $ exec conn "SELECT fail()"
+    -- Match only the first 13 characters of the error message here.  The
+    -- error message coming from the use of "error" nowadays contains
+    -- fragments of the callstack and not just the string we gave it.
     assertBool "Catch exception"
-        (sqlError == ErrorError && sqlErrorDetails == "error message")
+        (sqlError == ErrorError && T.take 13 sqlErrorDetails == "error message")
   where
     throwError _ _ = error "error message"
 
