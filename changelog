@@ -1,3 +1,6 @@
+v2.3.19
+	* Upgrade embedded sqlite3 library to 3.15.2.
+
 v2.3.18
 	* Upgrade embedded sqlite3 library to 3.15.0.
 
