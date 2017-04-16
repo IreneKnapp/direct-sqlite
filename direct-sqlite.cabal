@@ -40,6 +40,10 @@ flag urifilenames
   description: Enable URI filenames when using the bundled sqlite library
   default: True
 
+flag haveusleep
+  description: Enable use of os function usleep.
+  default: True
+
 Library
   exposed-modules:
     Database.SQLite3
@@ -68,6 +72,10 @@ Library
       }
       if flag(urifilenames) {
         cc-options: -DSQLITE_USE_URI
+      }
+
+      if flag(haveusleep) {
+         cc-options: -DHAVE_USLEEP
       }
     }
   }
