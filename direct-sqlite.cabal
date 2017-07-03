@@ -22,6 +22,7 @@ description:
 extra-source-files:
   cbits/sqlite3.c
   cbits/sqlite3.h
+  cbits/sqlite3ext.h
   changelog
 
 Source-Repository head
@@ -59,6 +60,10 @@ Library
       extra-libraries: pthread
     }
     c-sources: cbits/sqlite3.c
+    include-dirs: cbits
+    install-includes:
+      sqlite3.h
+      sqlite3ext.h
 
     if flag(fulltextsearch) {
       cc-options: -DSQLITE_ENABLE_FTS3
