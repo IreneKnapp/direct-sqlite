@@ -73,6 +73,7 @@ Library
       cc-options: -DSQLITE_ENABLE_FTS3
                   -DSQLITE_ENABLE_FTS3_PARENTHESIS
                   -DSQLITE_ENABLE_FTS4
+                  -DSQLITE_ENABLE_FTS5
     }
 
     if flag(urifilenames) {
