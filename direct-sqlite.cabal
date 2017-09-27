@@ -45,6 +45,10 @@ flag haveusleep
   description: Enable use of os function usleep.
   default: True
 
+flag json1
+  description: Enable json1 extension.
+  default: True
+
 Library
   exposed-modules:
     Database.SQLite3
@@ -69,6 +73,7 @@ Library
       cc-options: -DSQLITE_ENABLE_FTS3
                   -DSQLITE_ENABLE_FTS3_PARENTHESIS
                   -DSQLITE_ENABLE_FTS4
+                  -DSQLITE_ENABLE_FTS5
     }
 
     if flag(urifilenames) {
@@ -77,6 +82,10 @@ Library
 
     if flag(haveusleep) {
        cc-options: -DHAVE_USLEEP
+    }
+
+    if flag(json1) {
+      cc-options: -DSQLITE_ENABLE_JSON1
     }
   }
 
