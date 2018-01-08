@@ -23,6 +23,10 @@ extra-source-files:
   cbits/sqlite3.c
   cbits/sqlite3.h
   cbits/sqlite3ext.h
+  cbits/sqlcipher-3.4.2/sqlite3.c
+  cbits/sqlcipher-3.4.2/sqlite3.h
+  cbits/sqlcipher-3.4.2/sqlite3ext.h
+
   changelog
 
 Source-Repository head
@@ -49,6 +53,21 @@ flag json1
   description: Enable json1 extension.
   default: True
 
+flag commoncrypto
+  description: SQLCipher: Enable encryption using Apples commoncrypto
+  default: False
+  manual: True
+
+flag openssl
+  description: SQLCipher: Enable encryption using OpenSSL
+  default: False
+  manual: True
+
+flag tomcrypt
+  description: SQLCipher: Enable encryption using tomcrypt
+  default: False
+  manual: True
+
 Library
   exposed-modules:
     Database.SQLite3
@@ -63,8 +82,15 @@ Library
     if !os(windows) {
       extra-libraries: pthread
     }
-    c-sources: cbits/sqlite3.c
-    include-dirs: cbits
+    if flag(commoncrypto) || flag(openssl) || flag(tomcrypt) {
+      c-sources: cbits/sqlcipher-3.4.2/sqlite3.c
+      include-dirs: cbits/sqlcipher-3.4.2
+      cc-options: -DSQLITE_TEMP_STORE=2
+                  -DSQLITE_HAS_CODEC
+    } else {
+      c-sources: cbits/sqlite3.c
+      include-dirs: cbits
+    }
     install-includes:
       sqlite3.h
       sqlite3ext.h
@@ -86,6 +112,22 @@ Library
 
     if flag(json1) {
       cc-options: -DSQLITE_ENABLE_JSON1
+    }
+
+    if flag(commoncrypto) {
+      cc-options: -DSQLCIPHER_CRYPTO_CC
+      frameworks: Security
+                  CoreFoundation
+    }
+
+    if flag(openssl) {
+      cc-options: -DSQLCIPHER_CRYPTO_OPENSSL
+      extra-libraries: crypto
+    }
+
+    if flag(tomcrypt) {
+      cc-options: -DSQLCIPHER_CRYPTO_LIBTOMCRYPT
+      extra-libraries: tomcrypt
     }
   }
 
