@@ -137,6 +137,8 @@ import Database.SQLite3.Bindings
 
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Unsafe     as BSU
+import qualified Data.List.NonEmpty         as NEL
+import Data.Semigroup       (Semigroup ((<>), sconcat))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Applicative  ((<$>))
@@ -144,7 +146,7 @@ import Control.Exception as E
 import Control.Monad        (join, unless)
 import Data.ByteString      (ByteString)
 import Data.IORef
-import Data.Monoid
+import Data.Monoid          (Monoid (mempty, mappend, mconcat))
 import Data.String          (IsString(..))
 import Data.Text.Encoding.Error (lenientDecode)
 import Foreign
@@ -178,9 +180,13 @@ instance Show Utf8 where
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
 
+instance Semigroup Utf8 where
+    Utf8 a <> Utf8 b = Utf8 (BS.append a b)
+    sconcat = Utf8 . BS.concat . NEL.toList . fmap (\(Utf8 s) -> s)
+
 instance Monoid Utf8 where
     mempty = Utf8 BS.empty
-    mappend (Utf8 a) (Utf8 b) = Utf8 (BS.append a b)
+    mappend = (<>)
     mconcat = Utf8 . BS.concat . map (\(Utf8 s) -> s)
 
 packUtf8 :: a -> (Utf8 -> a) -> CString -> IO a
