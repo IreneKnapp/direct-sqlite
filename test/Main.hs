@@ -96,7 +96,7 @@ testExec TestEnv{..} = TestCase $ do
   exec conn "--"
   Left SQLError{sqlError = ErrorError} <- try $ exec conn "/*"
     -- sqlite3_exec does not allow "/*" to be terminated by end of input,
-    -- but <http://www.sqlite.org/lang_comment.html> says it's fine.
+    -- but <https://www.sqlite.org/lang_comment.html> says it's fine.
   exec conn ";--\n;/**/"
   withConn $ \conn -> do
     -- Make sure all the statements passed to exec are executed.

@@ -19,7 +19,7 @@ module Database.SQLite3.Direct (
     setSharedCacheEnabled,
 
     -- * Simple query execution
-    -- | <http://sqlite.org/c3ref/exec.html>
+    -- | <https://sqlite.org/c3ref/exec.html>
     exec,
     execWithCallback,
     ExecCallback,
@@ -41,7 +41,7 @@ module Database.SQLite3.Direct (
     columnName,
 
     -- * Binding values to a prepared statement
-    -- | <http://www.sqlite.org/c3ref/bind_blob.html>
+    -- | <https://www.sqlite.org/c3ref/bind_blob.html>
     bindInt64,
     bindDouble,
     bindText,
@@ -50,7 +50,7 @@ module Database.SQLite3.Direct (
     bindNull,
 
     -- * Reading the result row
-    -- | <http://www.sqlite.org/c3ref/column_blob.html>
+    -- | <https://www.sqlite.org/c3ref/column_blob.html>
     columnType,
     columnInt64,
     columnDouble,
@@ -262,7 +262,7 @@ data Backup = Backup Database (Ptr CBackup)
 
 ------------------------------------------------------------------------
 
--- | <http://www.sqlite.org/c3ref/open.html>
+-- | <https://www.sqlite.org/c3ref/open.html>
 open :: Utf8 -> IO (Either (Error, Utf8) Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
@@ -281,12 +281,12 @@ open (Utf8 path) =
                     then fail "sqlite3_open unexpectedly returned NULL"
                     else return $ Right db
 
--- | <http://www.sqlite.org/c3ref/close.html>
+-- | <https://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())
 close (Database db) =
     toResult () <$> c_sqlite3_close db
 
--- | <http://www.sqlite.org/c3ref/interrupt.html>
+-- | <https://www.sqlite.org/c3ref/interrupt.html>
 --
 -- Cause any pending operation on the 'Database' handle to stop at its earliest
 -- opportunity.  This simply sets a flag and returns immediately.  It does not
@@ -299,16 +299,17 @@ interrupt :: Database -> IO ()
 interrupt (Database db) =
     c_sqlite3_interrupt db
 
--- | <http://www.sqlite.org/c3ref/errcode.html>
+-- | <https://www.sqlite.org/c3ref/errcode.html>
 errcode :: Database -> IO Error
 errcode (Database db) =
     decodeError <$> c_sqlite3_errcode db
 
--- | <http://www.sqlite.org/c3ref/errcode.html>
+-- | <https://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
 
+-- | <https://www.sqlite.org/c3ref/exec.html>
 exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
 exec (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
@@ -387,7 +388,7 @@ type ExecCallback
     -> [Maybe Utf8]   -- ^ List of column values, as returned by 'columnText'.
     -> IO ()
 
--- | <http://www.sqlite.org/c3ref/profile.html>
+-- | <https://www.sqlite.org/c3ref/profile.html>
 --
 -- Enable/disable tracing of SQL execution.  Tracing can be disabled
 -- by setting 'Nothing' as the logger callback.
@@ -410,7 +411,7 @@ setTrace (Database db) logger =
             _ <- c_sqlite3_trace db cb nullPtr
             return ()
 
--- | <http://www.sqlite.org/c3ref/get_autocommit.html>
+-- | <https://www.sqlite.org/c3ref/get_autocommit.html>
 --
 -- Return 'True' if the connection is in autocommit mode, or 'False' if a
 -- transaction started with @BEGIN@ is still active.
@@ -428,7 +429,6 @@ getAutoCommit :: Database -> IO Bool
 getAutoCommit (Database db) =
     (/= 0) <$> c_sqlite3_get_autocommit db
 
-
 -- | <https://www.sqlite.org/c3ref/enable_shared_cache.html>
 --
 -- Enable or disable shared cache for all future connections.
@@ -437,8 +437,7 @@ setSharedCacheEnabled val =
     toResult () <$> c_sqlite3_enable_shared_cache
         (if val then 1 else 0)
 
-
--- | <http://www.sqlite.org/c3ref/prepare.html>
+-- | <https://www.sqlite.org/c3ref/prepare.html>
 --
 -- If the query contains no SQL statements, this returns
 -- @'Right' 'Nothing'@.
@@ -449,7 +448,7 @@ prepare (Database db) (Utf8 sql) =
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
                 toResultM (wrapNullablePtr Statement <$> peek statement)
 
--- | <http://www.sqlite.org/c3ref/db_handle.html>
+-- | <https://www.sqlite.org/c3ref/db_handle.html>
 getStatementDatabase :: Statement -> IO Database
 getStatementDatabase (Statement stmt) = do
     db <- c_sqlite3_db_handle stmt
@@ -457,12 +456,12 @@ getStatementDatabase (Statement stmt) = do
         then fail $ "sqlite3_db_handle(" ++ show stmt ++ ") returned NULL"
         else return (Database db)
 
--- | <http://www.sqlite.org/c3ref/step.html>
+-- | <https://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO (Either Error StepResult)
 step (Statement stmt) =
     toStepResult <$> c_sqlite3_step stmt
 
--- | <http://www.sqlite.org/c3ref/reset.html>
+-- | <https://www.sqlite.org/c3ref/reset.html>
 --
 -- Warning:
 --
@@ -475,7 +474,7 @@ reset :: Statement -> IO (Either Error ())
 reset (Statement stmt) =
     toResult () <$> c_sqlite3_reset stmt
 
--- | <http://www.sqlite.org/c3ref/finalize.html>
+-- | <https://www.sqlite.org/c3ref/finalize.html>
 --
 -- /Warning:/ If the most recent 'step' call failed,
 -- this will return the corresponding error.
@@ -483,14 +482,14 @@ finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
 
--- | <http://www.sqlite.org/c3ref/sql.html>
+-- | <https://www.sqlite.org/c3ref/sql.html>
 --
 -- Return a copy of the original SQL text used to compile the statement.
 statementSql :: Statement -> IO (Maybe Utf8)
 statementSql (Statement stmt) =
     c_sqlite3_sql stmt >>= packUtf8 Nothing Just
 
--- | <http://www.sqlite.org/c3ref/clear_bindings.html>
+-- | <https://www.sqlite.org/c3ref/clear_bindings.html>
 --
 -- Set all parameters in the prepared statement to null.
 clearBindings :: Statement -> IO ()
@@ -498,7 +497,7 @@ clearBindings (Statement stmt) = do
     _ <- c_sqlite3_clear_bindings stmt
     return ()
 
--- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_count.html>
 --
 -- This returns the index of the largest (rightmost) parameter.  Note that this
 -- is not necessarily the number of parameters.  If numbered parameters like
@@ -509,25 +508,25 @@ bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount (Statement stmt) =
     fromFFI <$> c_sqlite3_bind_parameter_count stmt
 
--- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_name.html>
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
 bindParameterName (Statement stmt) idx =
     c_sqlite3_bind_parameter_name stmt (toFFI idx) >>=
         packUtf8 Nothing Just
 
--- | <http://www.sqlite.org/c3ref/bind_parameter_index.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_index.html>
 bindParameterIndex :: Statement -> Utf8 -> IO (Maybe ParamIndex)
 bindParameterIndex (Statement stmt) (Utf8 name) =
     BS.useAsCString name $ \name' -> do
         idx <- fromFFI <$> c_sqlite3_bind_parameter_index stmt name'
         return $ if idx == 0 then Nothing else Just idx
 
--- | <http://www.sqlite.org/c3ref/column_count.html>
+-- | <https://www.sqlite.org/c3ref/column_count.html>
 columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
     fromFFI <$> c_sqlite3_column_count stmt
 
--- | <http://www.sqlite.org/c3ref/column_name.html>
+-- | <https://www.sqlite.org/c3ref/column_name.html>
 columnName :: Statement -> ColumnIndex -> IO (Maybe Utf8)
 columnName (Statement stmt) idx =
     c_sqlite3_column_name stmt (toFFI idx) >>=
@@ -586,13 +585,12 @@ columnBlob (Statement stmt) idx = do
     len <- c_sqlite3_column_bytes stmt (toFFI idx)
     packCStringLen ptr len
 
-
--- | <http://www.sqlite.org/c3ref/last_insert_rowid.html>
+-- | <https://www.sqlite.org/c3ref/last_insert_rowid.html>
 lastInsertRowId :: Database -> IO Int64
 lastInsertRowId (Database db) =
     c_sqlite3_last_insert_rowid db
 
--- | <http://www.sqlite.org/c3ref/changes.html>
+-- | <https://www.sqlite.org/c3ref/changes.html>
 --
 -- Return the number of rows that were changed, inserted, or deleted
 -- by the most recent @INSERT@, @DELETE@, or @UPDATE@ statement.
@@ -600,7 +598,7 @@ changes :: Database -> IO Int
 changes (Database db) =
     fromIntegral <$> c_sqlite3_changes db
 
--- | <http://www.sqlite.org/c3ref/total_changes.html>
+-- | <https://www.sqlite.org/c3ref/total_changes.html>
 --
 -- Return the total number of row changes caused by @INSERT@, @DELETE@,
 -- or @UPDATE@ statements since the 'Database' was opened.
@@ -628,7 +626,7 @@ destroyCFuncPtrs = IOU.unsafePerformIO $ mkCFuncDestroy destroy
         freeStablePtr p'
 {-# NOINLINE destroyCFuncPtrs #-}
 
--- | <http://sqlite.org/c3ref/create_function.html>
+-- | <https://sqlite.org/c3ref/create_function.html>
 --
 -- Create a custom SQL function or redefine the behavior of an existing
 -- function.
@@ -732,7 +730,6 @@ maybeArgCount :: Maybe ArgCount -> CArgCount
 maybeArgCount (Just n) = toFFI n
 maybeArgCount Nothing = -1
 
-
 funcArgCount :: FuncArgs -> ArgCount
 funcArgCount (FuncArgs nArgs _) = fromIntegral nArgs
 
@@ -768,7 +765,6 @@ extractFuncArg defVal extract (FuncArgs nArgs p) idx
         extract cval
     | otherwise = return defVal
 
-
 funcResultInt64 :: FuncContext -> Int64 -> IO ()
 funcResultInt64 (FuncContext ctx) value =
     c_sqlite3_result_int64 ctx value
@@ -803,20 +799,19 @@ getFuncContextDatabase (FuncContext ctx) = do
         then fail $ "sqlite3_context_db_handle(" ++ show ctx ++ ") returned NULL"
         else return (Database db)
 
-
--- Deallocate the function pointer to the comparison function used to
+-- | Deallocate the function pointer to the comparison function used to
 -- implement a custom collation
 destroyCCompare :: CFuncDestroy ()
 destroyCCompare ptr = freeHaskellFunPtr ptr'
   where
     ptr' = castPtrToFunPtr ptr :: FunPtr (CCompare ())
 
--- This is called by sqlite so we create one global FunPtr to pass to sqlite
+-- | This is called by sqlite so we create one global FunPtr to pass to sqlite
 destroyCComparePtr :: FunPtr (CFuncDestroy ())
 destroyCComparePtr = IOU.unsafePerformIO $ mkCFuncDestroy destroyCCompare
 {-# NOINLINE destroyCComparePtr #-}
 
--- | <http://www.sqlite.org/c3ref/create_collation.html>
+-- | <https://www.sqlite.org/c3ref/create_collation.html>
 createCollation
     :: Database
     -> Utf8                       -- ^ Name of the collation.
@@ -850,13 +845,12 @@ deleteCollation (Database db) (Utf8 name) =
             c_sqlite3_create_collation_v2
                 db namePtr c_SQLITE_UTF8 nullPtr nullFunPtr nullFunPtr
 
--- | <http://www.sqlite.org/c3ref/enable_load_extension.html>
+-- | <https://www.sqlite.org/c3ref/enable_load_extension.html>
 --
 -- Enable or disable extension loading.
 setLoadExtensionEnabled :: Database -> Bool -> IO (Either Error ())
 setLoadExtensionEnabled (Database db) enabled = do
     toResult () <$> c_sqlite3_enable_load_extension db enabled
-
 
 -- | <https://www.sqlite.org/c3ref/blob_open.html>
 --
@@ -885,7 +879,10 @@ blobClose (Blob _ blob) =
     toResult () <$> c_sqlite3_blob_close blob
 
 -- | <https://www.sqlite.org/c3ref/blob_reopen.html>
-blobReopen :: Blob -> Int64 -> IO (Either Error ())
+blobReopen
+    :: Blob
+    -> Int64 -- ^ The @ROWID@ of the row.
+    -> IO (Either Error ())
 blobReopen (Blob _ blob) rowid =
     toResult () <$> c_sqlite3_blob_reopen blob rowid
 
@@ -897,8 +894,8 @@ blobBytes (Blob _ blob) =
 -- | <https://www.sqlite.org/c3ref/blob_read.html>
 blobRead
     :: Blob
-    -> Int -- ^ Number of bytes to read.
-    -> Int -- ^ Offset within the blob.
+    -> Int  -- ^ Number of bytes to read.
+    -> Int  -- ^ Offset within the blob.
     -> IO (Either Error ByteString)
 blobRead blob len offset =
     -- we do not use allocaBytes here because it deallocates its buffer
@@ -931,12 +928,12 @@ blobWrite (Blob _ blob) bs offset =
         toResult () <$>
             c_sqlite3_blob_write blob buf (fromIntegral len) (fromIntegral offset)
 
-
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupinit>
 backupInit
-    :: Database  -- ^ Destination database handle
-    -> Utf8      -- ^ Destination database name
-    -> Database  -- ^ Source database handle
-    -> Utf8      -- ^ Source database name
+    :: Database  -- ^ Destination database handle.
+    -> Utf8      -- ^ Destination database name.
+    -> Database  -- ^ Source database handle.
+    -> Utf8      -- ^ Source database name.
     -> IO (Either Error Backup)
 backupInit (Database dstDb) (Utf8 dstName) (Database srcDb) (Utf8 srcName) =
     BS.useAsCString dstName $ \dstName' ->
@@ -946,20 +943,27 @@ backupInit (Database dstDb) (Utf8 dstName) (Database srcDb) (Utf8 srcName) =
             then Left <$> errcode (Database dstDb)
             else return (Right (Backup (Database dstDb) r))
 
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupfinish>
 backupFinish :: Backup -> IO (Either Error ())
 backupFinish (Backup _ backup) =
     toResult () <$>
         c_sqlite3_backup_finish backup
 
-backupStep :: Backup -> Int -> IO (Either Error BackupStepResult)
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupstep>
+backupStep
+    :: Backup
+    -> Int    -- ^ Number of pages to copy; if negative, all remaining source pages are copied.
+    -> IO (Either Error BackupStepResult)
 backupStep (Backup _ backup) pages =
     toBackupStepResult <$>
         c_sqlite3_backup_step backup (fromIntegral pages)
 
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupremaining>
 backupRemaining :: Backup -> IO Int
 backupRemaining (Backup _ backup) =
     fromIntegral <$> c_sqlite3_backup_remaining backup
 
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backuppagecount>
 backupPagecount :: Backup -> IO Int
 backupPagecount (Backup _ backup) =
     fromIntegral <$> c_sqlite3_backup_pagecount backup

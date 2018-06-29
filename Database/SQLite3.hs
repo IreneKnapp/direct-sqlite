@@ -8,7 +8,7 @@ module Database.SQLite3 (
     close,
 
     -- * Simple query execution
-    -- | <http://sqlite.org/c3ref/exec.html>
+    -- | <https://sqlite.org/c3ref/exec.html>
     exec,
     execPrint,
     execWithCallback,
@@ -29,7 +29,7 @@ module Database.SQLite3 (
     columnName,
 
     -- * Binding values to a prepared statement
-    -- | <http://www.sqlite.org/c3ref/bind_blob.html>
+    -- | <https://www.sqlite.org/c3ref/bind_blob.html>
     bindSQLData,
     bind,
     bindNamed,
@@ -42,7 +42,7 @@ module Database.SQLite3 (
     bindNull,
 
     -- * Reading the result row
-    -- | <http://www.sqlite.org/c3ref/column_blob.html>
+    -- | <https://www.sqlite.org/c3ref/column_blob.html>
     --
     -- Warning: 'column' and 'columns' will throw a 'DecodeError' if any @TEXT@
     -- datum contains invalid UTF-8.
@@ -221,7 +221,6 @@ data SQLError = SQLError
 -- to defer message construction in the case where a user catches and
 -- immediately handles the error.
 
-
 instance Show SQLError where
     show SQLError{ sqlError        = code
                  , sqlErrorDetails = details
@@ -285,14 +284,13 @@ checkErrorMsg fn result = case result of
 appendShow :: Show a => Text -> a -> Text
 appendShow txt a = txt `T.append` (T.pack . show) a
 
-
--- | <http://www.sqlite.org/c3ref/open.html>
+-- | <https://www.sqlite.org/c3ref/open.html>
 open :: Text -> IO Database
 open path =
     Direct.open (toUtf8 path)
         >>= checkErrorMsg ("open " `appendShow` path)
 
--- | <http://www.sqlite.org/c3ref/close.html>
+-- | <https://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO ()
 close db =
     Direct.close db >>= checkError (DetailDatabase db) "close"
@@ -383,7 +381,7 @@ type ExecCallback
     -> [Maybe Text]   -- ^ List of column values, as returned by 'columnText'.
     -> IO ()
 
--- | <http://www.sqlite.org/c3ref/prepare.html>
+-- | <https://www.sqlite.org/c3ref/prepare.html>
 --
 -- Unlike 'exec', 'prepare' only executes the first statement, and ignores
 -- subsequent statements.
@@ -392,7 +390,7 @@ type ExecCallback
 prepare :: Database -> Text -> IO Statement
 prepare db sql = prepareUtf8 db (toUtf8 sql)
 
--- | <http://www.sqlite.org/c3ref/prepare.html>
+-- | <https://www.sqlite.org/c3ref/prepare.html>
 --
 -- It can help to avoid redundant Utf8 to Text conversion if you already
 -- have Utf8
@@ -406,7 +404,7 @@ prepareUtf8 db sql = do
         Nothing   -> fail "Direct.SQLite3.prepare: empty query string"
         Just stmt -> return stmt
 
--- | <http://www.sqlite.org/c3ref/step.html>
+-- | <https://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO StepResult
 step statement =
     Direct.step statement >>= checkError (DetailStatement statement) "step"
@@ -431,7 +429,7 @@ step statement =
 --
 --  [1]: https://github.com/yesodweb/persistent/issues/92#issuecomment-7806421
 
--- | <http://www.sqlite.org/c3ref/reset.html>
+-- | <https://www.sqlite.org/c3ref/reset.html>
 --
 -- Note that in the C API, @sqlite3_reset@ returns an error code if the most
 -- recent @sqlite3_step@ indicated an error.  We do not replicate that behavior
@@ -441,7 +439,7 @@ reset statement = do
     _ <- Direct.reset statement
     return ()
 
--- | <http://www.sqlite.org/c3ref/finalize.html>
+-- | <https://www.sqlite.org/c3ref/finalize.html>
 --
 -- Like 'reset', 'finalize' never throws an exception.
 finalize :: Statement -> IO ()
@@ -449,8 +447,7 @@ finalize statement = do
     _ <- Direct.finalize statement
     return ()
 
-
--- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_name.html>
 --
 -- Return the N-th SQL parameter name.
 --
@@ -468,7 +465,7 @@ bindParameterName stmt idx = do
   where
     desc = "Database.SQLite3.bindParameterName: Invalid UTF-8"
 
--- | <http://www.sqlite.org/c3ref/column_name.html>
+-- | <https://www.sqlite.org/c3ref/column_name.html>
 --
 -- Return the name of a result column.  If the column index is out of range,
 -- return 'Nothing'.
@@ -587,9 +584,7 @@ bindNamed statement params = do
                 Nothing ->
                     fail ("unknown named parameter "++show name)
 
-
--- |
--- This will throw a 'DecodeError' if the datum contains invalid UTF-8.
+-- | This will throw a 'DecodeError' if the datum contains invalid UTF-8.
 -- If this behavior is undesirable, you can use 'Direct.columnText' from
 -- "Database.SQLite3.Direct", which does not perform conversion to 'Text'.
 columnText :: Statement -> ColumnIndex -> IO Text
@@ -615,10 +610,9 @@ typedColumn theType statement idx = case theType of
     BlobColumn    -> SQLBlob    <$> columnBlob   statement idx
     NullColumn    -> return SQLNull
 
--- |
--- This avoids extra API calls using the list of column types.
+-- | This avoids extra API calls using the list of column types.
 -- If passed types do not correspond to the actual types, the values will be
--- converted according to the rules at <http://www.sqlite.org/c3ref/column_blob.html>.
+-- converted according to the rules at <https://www.sqlite.org/c3ref/column_blob.html>.
 -- If the list contains more items that number of columns, the result is undefined.
 typedColumns :: Statement -> [Maybe ColumnType] -> IO [SQLData]
 typedColumns statement = zipWithM f [0..] where
@@ -626,8 +620,7 @@ typedColumns statement = zipWithM f [0..] where
         Nothing -> column statement idx
         Just t  -> typedColumn t statement idx
 
-
--- | <http://sqlite.org/c3ref/create_function.html>
+-- | <https://sqlite.org/c3ref/create_function.html>
 --
 -- Create a custom SQL function or redefine the behavior of an existing
 -- function. If the function is deterministic, i.e. if it always returns the
@@ -687,8 +680,7 @@ funcResultText :: FuncContext -> Text -> IO ()
 funcResultText ctx value =
     Direct.funcResultText ctx (toUtf8 value)
 
-
--- | <http://www.sqlite.org/c3ref/create_collation.html>
+-- | <https://www.sqlite.org/c3ref/create_collation.html>
 createCollation
     :: Database
     -> Text                       -- ^ Name of the collation.
@@ -707,7 +699,6 @@ deleteCollation :: Database -> Text -> IO ()
 deleteCollation db name =
     Direct.deleteCollation db (toUtf8 name)
         >>= checkError (DetailDatabase db) ("deleteCollation " `appendShow` name)
-
 
 -- | <https://www.sqlite.org/c3ref/blob_open.html>
 --
@@ -731,7 +722,10 @@ blobClose blob@(Direct.Blob db _) =
         >>= checkError (DetailDatabase db) "blobClose"
 
 -- | <https://www.sqlite.org/c3ref/blob_reopen.html>
-blobReopen :: Blob -> Int64 -> IO ()
+blobReopen
+    :: Blob
+    -> Int64 -- ^ The @ROWID@ of the row.
+    -> IO ()
 blobReopen blob@(Direct.Blob db _) rowid =
     Direct.blobReopen blob rowid
         >>= checkError (DetailDatabase db) "blobReopen"
@@ -761,12 +755,11 @@ blobWrite blob@(Direct.Blob db _) bs offset =
     Direct.blobWrite blob bs offset
         >>= checkError (DetailDatabase db) "blobWrite"
 
-
 backupInit
-    :: Database  -- ^ Destination database handle
-    -> Text      -- ^ Destination database name
-    -> Database  -- ^ Source database handle
-    -> Text      -- ^ Source database name
+    :: Database  -- ^ Destination database handle.
+    -> Text      -- ^ Destination database name.
+    -> Database  -- ^ Source database handle.
+    -> Text      -- ^ Source database name.
     -> IO Backup
 backupInit dstDb dstName srcDb srcName =
     Direct.backupInit dstDb (toUtf8 dstName) srcDb (toUtf8 srcName)
