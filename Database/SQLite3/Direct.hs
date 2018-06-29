@@ -421,8 +421,7 @@ getAutoCommit (Database db) =
 -- Enable or disable shared cache for all future connections.
 setSharedCacheEnabled :: Bool -> IO (Either Error ())
 setSharedCacheEnabled val =
-    toResult () <$> c_sqlite3_enable_shared_cache
-        (if val then 1 else 0)
+    toResult () <$> c_sqlite3_enable_shared_cache val
 
 -- | <https://www.sqlite.org/c3ref/prepare.html>
 --
