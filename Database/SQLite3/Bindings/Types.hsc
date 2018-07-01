@@ -39,6 +39,7 @@ module Database.SQLite3.Bindings.Types (
     -- * Miscellaneous
     CNumBytes(..),
     CDestructor,
+    c_SQLITE_STATIC,
     c_SQLITE_TRANSIENT,
     c_SQLITE_UTF8,
 
@@ -91,6 +92,8 @@ data Error = ErrorOK                     -- ^ Successful result
            | ErrorFormat                 -- ^ Auxiliary database format error
            | ErrorRange                  -- ^ 2nd parameter to sqlite3_bind out of range
            | ErrorNotADatabase           -- ^ File opened that is not a database file
+           | ErrorNotice                 -- ^ Notifications from sqlite3_log()
+           | ErrorWarning                -- ^ Warnings from sqlite3_log()
            | ErrorRow                    -- ^ @sqlite3_step()@ has another row ready
            | ErrorDone                   -- ^ @sqlite3_step()@ has finished executing
              deriving (Eq, Show)
@@ -202,6 +205,10 @@ newtype CNumBytes = CNumBytes CInt
 -- @Ptr CDestructor@ = @sqlite3_destructor_type@
 data CDestructor
 
+-- | Tells SQLite3 that the content pointer is constant and will never change
+c_SQLITE_STATIC :: Ptr CDestructor
+c_SQLITE_STATIC = intPtrToPtr 0
+
 -- | Tells SQLite3 to make its own private copy of the data
 c_SQLITE_TRANSIENT :: Ptr CDestructor
 c_SQLITE_TRANSIENT = intPtrToPtr (-1)
@@ -282,6 +289,8 @@ decodeError (CError n) = case n of
     #{const SQLITE_FORMAT}     -> ErrorFormat
     #{const SQLITE_RANGE}      -> ErrorRange
     #{const SQLITE_NOTADB}     -> ErrorNotADatabase
+    #{const SQLITE_NOTICE}     -> ErrorNotice
+    #{const SQLITE_WARNING}    -> ErrorWarning
     #{const SQLITE_ROW}        -> ErrorRow
     #{const SQLITE_DONE}       -> ErrorDone
     _                          -> error $ "decodeError " ++ show n
@@ -315,6 +324,8 @@ encodeError err = CError $ case err of
     ErrorFormat             -> #const SQLITE_FORMAT
     ErrorRange              -> #const SQLITE_RANGE
     ErrorNotADatabase       -> #const SQLITE_NOTADB
+    ErrorNotice             -> #const SQLITE_NOTICE
+    ErrorWarning            -> #const SQLITE_WARNING
     ErrorRow                -> #const SQLITE_ROW
     ErrorDone               -> #const SQLITE_DONE
 
