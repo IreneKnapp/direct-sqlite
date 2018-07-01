@@ -137,6 +137,7 @@ import Database.SQLite3.Bindings
 
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Unsafe     as BSU
+import qualified Data.ByteString.Internal   as BSI
 import Data.Semigroup       (Semigroup)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -883,20 +884,10 @@ blobRead
     -> Int  -- ^ Number of bytes to read.
     -> Int  -- ^ Offset within the blob.
     -> IO (Either Error ByteString)
-blobRead blob len offset =
-    -- we do not use allocaBytes here because it deallocates its buffer
-    -- which would necessitate copying it
-    -- instead we use mallocBytes and mask to ensure both exception
-    -- safety and that the buffer is not copied any times
-    mask $ \restore -> do
-        buf <- mallocBytes len
-        r <- restore (blobReadBuf blob buf len offset)
-            `onException` (free buf)
-        case r of
-            Left err -> free buf >> return (Left err)
-            Right () -> do
-                bs <- BSU.unsafePackCStringFinalizer buf len (free buf)
-                return (Right bs)
+blobRead blob len offset = do
+    fp <- BSI.mallocByteString len
+    fmap (\_ -> BSI.fromForeignPtr fp 0 len) <$>
+        withForeignPtr fp (\p -> blobReadBuf blob p len offset)
 
 blobReadBuf :: Blob -> Ptr a -> Int -> Int -> IO (Either Error ())
 blobReadBuf (Blob _ blob) buf len offset =
