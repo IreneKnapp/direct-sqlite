@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
@@ -136,8 +137,7 @@ import Database.SQLite3.Bindings
 
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Unsafe     as BSU
-import qualified Data.List.NonEmpty         as NEL
-import Data.Semigroup       (Semigroup ((<>), sconcat))
+import Data.Semigroup       (Semigroup)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Control.Exception as E
@@ -168,7 +168,7 @@ data BackupStepResult
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Semigroup, Monoid)
 
 instance Show Utf8 where
     show (Utf8 s) = (show . T.decodeUtf8With lenientDecode) s
@@ -176,15 +176,6 @@ instance Show Utf8 where
 -- | @fromString = Utf8 . 'T.encodeUtf8' . 'T.pack'@
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
-
-instance Semigroup Utf8 where
-    Utf8 a <> Utf8 b = Utf8 (BS.append a b)
-    sconcat = Utf8 . BS.concat . NEL.toList . fmap (\(Utf8 s) -> s)
-
-instance Monoid Utf8 where
-    mempty = Utf8 BS.empty
-    mappend = (<>)
-    mconcat = Utf8 . BS.concat . map (\(Utf8 s) -> s)
 
 packUtf8 :: a -> (Utf8 -> a) -> CString -> IO a
 packUtf8 n f cstr | cstr == nullPtr = return n
@@ -302,7 +293,7 @@ errcode (Database db) =
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
 errmsg (Database db) =
-    c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
+    c_sqlite3_errmsg db >>= packUtf8 mempty id
 
 -- | <https://www.sqlite.org/c3ref/exec.html>
 exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
@@ -313,7 +304,7 @@ exec (Database db) (Utf8 sql) =
         case toResult () rc of
             Left err -> do
                 msgPtr <- peek msgPtrOut
-                msg <- packUtf8 (Utf8 BS.empty) id msgPtr
+                msg <- packUtf8 mempty id msgPtr
                 c_sqlite3_free msgPtr
                 return $ Left (err, msg)
             Right () -> return $ Right ()
@@ -361,7 +352,7 @@ execWithCallback (Database db) (Utf8 sql) cb = do
       \pExecCallback -> do
         let returnError err = do
                 msgPtr <- peek msgPtrOut
-                msg <- packUtf8 (Utf8 BS.empty) id msgPtr
+                msg <- packUtf8 mempty id msgPtr
                 c_sqlite3_free msgPtr
                 return $ Left (err, msg)
         rc <- c_sqlite3_exec db sql' pExecCallback nullPtr msgPtrOut
@@ -401,7 +392,7 @@ setTrace (Database db) logger =
             -- though, since 'setTrace' is mainly for debugging, and is
             -- typically only called once per application invocation.
             cb <- mkCTraceCallback $ \_ctx cStr -> do
-                msg <- packUtf8 (Utf8 BS.empty) id cStr
+                msg <- packUtf8 mempty id cStr
                 output msg
             _ <- c_sqlite3_trace db cb nullPtr
             return ()
