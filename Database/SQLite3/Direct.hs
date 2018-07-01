@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
@@ -141,12 +140,10 @@ import qualified Data.List.NonEmpty         as NEL
 import Data.Semigroup       (Semigroup ((<>), sconcat))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Control.Applicative  ((<$>))
 import Control.Exception as E
 import Control.Monad        (join, unless)
 import Data.ByteString      (ByteString)
 import Data.IORef
-import Data.Monoid          (Monoid (mempty, mappend, mconcat))
 import Data.String          (IsString(..))
 import Data.Text.Encoding.Error (lenientDecode)
 import Foreign
@@ -225,7 +222,7 @@ toResult _ code       = Left $ decodeError code
 
 -- Only perform the action if the 'CError' is SQLITE_OK.
 toResultM :: Monad m => m a -> CError -> m (Result a)
-toResultM m (CError 0) = m >>= return . Right
+toResultM m (CError 0) = Right <$> m
 toResultM _ code       = return $ Left $ decodeError code
 
 toStepResult :: CError -> Result StepResult
@@ -841,7 +838,7 @@ createCollation (Database db) (Utf8 name) cmp = mask_ $ do
 deleteCollation :: Database -> Utf8 -> IO (Either Error ())
 deleteCollation (Database db) (Utf8 name) =
     BS.useAsCString name $ \namePtr ->
-        toResult () <$> do
+        toResult () <$>
             c_sqlite3_create_collation_v2
                 db namePtr c_SQLITE_UTF8 nullPtr nullFunPtr nullFunPtr
 
@@ -849,7 +846,7 @@ deleteCollation (Database db) (Utf8 name) =
 --
 -- Enable or disable extension loading.
 setLoadExtensionEnabled :: Database -> Bool -> IO (Either Error ())
-setLoadExtensionEnabled (Database db) enabled = do
+setLoadExtensionEnabled (Database db) enabled =
     toResult () <$> c_sqlite3_enable_load_extension db enabled
 
 -- | <https://www.sqlite.org/c3ref/blob_open.html>
@@ -867,7 +864,7 @@ blobOpen (Database db) (Utf8 zDb) (Utf8 zTable) (Utf8 zColumn) rowid rw =
     BS.useAsCString zDb $ \ptrDb ->
     BS.useAsCString zTable $ \ptrTable ->
     BS.useAsCString zColumn $ \ptrColumn ->
-    alloca $ \ptrBlob -> do
+    alloca $ \ptrBlob ->
         c_sqlite3_blob_open db ptrDb ptrTable ptrColumn rowid flags ptrBlob
             >>= toResultM (Blob (Database db) <$> peek ptrBlob)
   where

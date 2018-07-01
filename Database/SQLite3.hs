@@ -182,7 +182,6 @@ import qualified Database.SQLite3.Direct as Direct
 import Prelude hiding (error)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Control.Applicative  ((<$>))
 import Control.Concurrent
 import Control.Exception
 import Control.Monad        (when, zipWithM, zipWithM_)
@@ -765,7 +764,7 @@ backupInit dstDb dstName srcDb srcName =
     Direct.backupInit dstDb (toUtf8 dstName) srcDb (toUtf8 srcName)
         >>= checkError (DetailDatabase dstDb) "backupInit"
 
-backupFinish :: Backup -> IO (())
+backupFinish :: Backup -> IO ()
 backupFinish backup@(Direct.Backup dstDb _) =
     Direct.backupFinish backup
         >>= checkError (DetailDatabase dstDb) "backupFinish"
