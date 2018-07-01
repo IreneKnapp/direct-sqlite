@@ -210,29 +210,27 @@ wrapNullablePtr :: (Ptr a -> b) -> Ptr a -> Maybe b
 wrapNullablePtr f ptr | ptr == nullPtr = Nothing
                       | otherwise      = Just (f ptr)
 
-type Result a = Either Error a
-
--- Convert a 'CError' to a 'Result', in the common case where
+-- Convert a 'CError' to a 'Either Error', in the common case where
 -- SQLITE_OK signals success and anything else signals an error.
 --
 -- Note that SQLITE_OK == 0.
-toResult :: a -> CError -> Result a
+toResult :: a -> CError -> Either Error a
 toResult a (CError 0) = Right a
 toResult _ code       = Left $ decodeError code
 
 -- Only perform the action if the 'CError' is SQLITE_OK.
-toResultM :: Monad m => m a -> CError -> m (Result a)
+toResultM :: Monad m => m a -> CError -> m (Either Error a)
 toResultM m (CError 0) = Right <$> m
 toResultM _ code       = return $ Left $ decodeError code
 
-toStepResult :: CError -> Result StepResult
+toStepResult :: CError -> Either Error StepResult
 toStepResult code =
     case decodeError code of
         ErrorRow  -> Right Row
         ErrorDone -> Right Done
         err       -> Left err
 
-toBackupStepResult :: CError -> Result BackupStepResult
+toBackupStepResult :: CError -> Either Error BackupStepResult
 toBackupStepResult code =
     case decodeError code of
         ErrorOK   -> Right BackupOK
