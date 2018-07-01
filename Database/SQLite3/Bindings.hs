@@ -98,6 +98,7 @@ module Database.SQLite3.Bindings (
 
     -- * Miscellaneous
     c_sqlite3_free,
+    c_sqlite3_free_p,
 
     -- * Extensions
     c_sqlite3_enable_load_extension,
@@ -478,6 +479,10 @@ foreign import ccall "wrapper"
 -- | <https://sqlite.org/c3ref/free.html>
 foreign import ccall "sqlite3_free"
     c_sqlite3_free :: Ptr a -> IO ()
+
+-- | <https://sqlite.org/c3ref/free.html>
+foreign import ccall "&sqlite3_free"
+    c_sqlite3_free_p :: FunPtr (Ptr a -> IO ())
 
 -- | <https://sqlite.org/c3ref/enable_load_extension.html>
 foreign import ccall "sqlite3_enable_load_extension"

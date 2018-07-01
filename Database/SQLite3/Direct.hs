@@ -296,19 +296,29 @@ errmsg :: Database -> IO Utf8
 errmsg (Database db) =
     c_sqlite3_errmsg db >>= packUtf8 mempty id
 
+withErrorMessagePtr :: (Ptr CString -> IO CError) -> IO (Either (Error, Utf8) ())
+withErrorMessagePtr action =
+    alloca $ \msgPtrOut -> mask $ \restore -> do
+        poke msgPtrOut nullPtr
+        rc <- restore (action msgPtrOut)
+            `onException` (peek msgPtrOut >>= c_sqlite3_free)
+        case toResult () rc of
+            Left err -> do
+                msgPtr <- peek msgPtrOut
+                if msgPtr == nullPtr
+                    then return (Left (err, mempty))
+                    else do
+                        len <- BSI.c_strlen msgPtr
+                        fp <- newForeignPtr c_sqlite3_free_p msgPtr
+                        let bs = BSI.fromForeignPtr (castForeignPtr fp) 0 (fromIntegral len)
+                        return (Left (err, Utf8 bs))
+            Right () -> return (Right ())
+
 -- | <https://www.sqlite.org/c3ref/exec.html>
 exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
 exec (Database db) (Utf8 sql) =
     BS.useAsCString sql $ \sql' ->
-    alloca $ \msgPtrOut -> do
-        rc <- c_sqlite3_exec db sql' nullFunPtr nullPtr msgPtrOut
-        case toResult () rc of
-            Left err -> do
-                msgPtr <- peek msgPtrOut
-                msg <- packUtf8 mempty id msgPtr
-                c_sqlite3_free msgPtr
-                return $ Left (err, msg)
-            Right () -> return $ Right ()
+        withErrorMessagePtr (c_sqlite3_exec db sql' nullFunPtr nullPtr)
 
 -- | Like 'exec', but invoke the callback for each result row.
 --
@@ -348,23 +358,15 @@ execWithCallback (Database db) (Utf8 sql) cb = do
             cb' values
 
     BS.useAsCString sql $ \sql' ->
-      alloca $ \msgPtrOut ->
-      bracket (mkCExecCallback cExecCallback) freeHaskellFunPtr $
-      \pExecCallback -> do
-        let returnError err = do
-                msgPtr <- peek msgPtrOut
-                msg <- packUtf8 mempty id msgPtr
-                c_sqlite3_free msgPtr
-                return $ Left (err, msg)
-        rc <- c_sqlite3_exec db sql' pExecCallback nullPtr msgPtrOut
-        case toResult () rc of
-            Left ErrorAbort -> do
-                m <- readIORef abortReason
-                case m of
-                    Nothing -> returnError ErrorAbort
-                    Just ex -> throwIO ex
-            Left err -> returnError err
-            Right () -> return $ Right ()
+        bracket (mkCExecCallback cExecCallback) freeHaskellFunPtr $ \pExecCallback -> do
+            e <- withErrorMessagePtr (c_sqlite3_exec db sql' pExecCallback nullPtr)
+            case e of
+                Left r@(ErrorAbort, _) -> do
+                    m <- readIORef abortReason
+                    case m of
+                        Nothing -> return (Left r)
+                        Just ex -> throwIO ex
+                r               -> return r
 
 type ExecCallback
      = ColumnCount    -- ^ Number of columns, which is the number of items in
