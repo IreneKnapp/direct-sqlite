@@ -28,6 +28,7 @@ module Database.SQLite3.Direct (
     prepare,
     getStatementDatabase,
     step,
+    stepNoCB,
     reset,
     finalize,
     clearBindings,
@@ -448,6 +449,14 @@ getStatementDatabase (Statement stmt) = do
 step :: Statement -> IO (Either Error StepResult)
 step (Statement stmt) =
     toStepResult <$> c_sqlite3_step stmt
+
+-- | <https://www.sqlite.org/c3ref/step.html>
+--
+-- Faster step for statements that don't callback to Haskell
+-- functions (e.g. by using custom SQL functions).
+stepNoCB :: Statement -> IO (Either Error StepResult)
+stepNoCB (Statement stmt) =
+    toStepResult <$> c_sqlite3_step_unsafe stmt
 
 -- | <https://www.sqlite.org/c3ref/reset.html>
 --

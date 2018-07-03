@@ -24,6 +24,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_prepare_v2,
     c_sqlite3_db_handle,
     c_sqlite3_step,
+    c_sqlite3_step_unsafe,
     c_sqlite3_reset,
     c_sqlite3_finalize,
     c_sqlite3_clear_bindings,
@@ -234,6 +235,10 @@ foreign import ccall unsafe "sqlite3_db_handle"
 -- | <https://www.sqlite.org/c3ref/step.html>
 foreign import ccall "sqlite3_step"
     c_sqlite3_step :: Ptr CStatement -> IO CError
+
+-- | <https://www.sqlite.org/c3ref/step.html>
+foreign import ccall unsafe "sqlite3_step"
+    c_sqlite3_step_unsafe :: Ptr CStatement -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/reset.html>
 --

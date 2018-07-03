@@ -18,6 +18,7 @@ module Database.SQLite3 (
     prepare,
     prepareUtf8,
     step,
+    stepNoCB,
     reset,
     finalize,
     clearBindings,
@@ -407,6 +408,14 @@ prepareUtf8 db sql = do
 step :: Statement -> IO StepResult
 step statement =
     Direct.step statement >>= checkError (DetailStatement statement) "step"
+
+-- | <https://www.sqlite.org/c3ref/step.html>
+--
+-- Faster step for statements that don't callback to Haskell
+-- functions (e.g. by using custom SQL functions).
+stepNoCB :: Statement -> IO StepResult
+stepNoCB statement =
+    Direct.stepNoCB statement >>= checkError (DetailStatement statement) "stepNoCB"
 
 -- Note: sqlite3_reset and sqlite3_finalize return an error code if the most
 -- recent sqlite3_step indicated an error.  I think these are the only times
