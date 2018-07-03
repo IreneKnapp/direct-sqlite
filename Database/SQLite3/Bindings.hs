@@ -142,11 +142,11 @@ foreign import ccall "sqlite3_close"
     c_sqlite3_close :: Ptr CDatabase -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
-foreign import ccall "sqlite3_errcode"
+foreign import ccall unsafe "sqlite3_errcode"
     c_sqlite3_errcode :: Ptr CDatabase -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
-foreign import ccall "sqlite3_errmsg"
+foreign import ccall unsafe "sqlite3_errmsg"
     c_sqlite3_errmsg :: Ptr CDatabase -> IO CString
 
 -- | <https://www.sqlite.org/c3ref/interrupt.html>
@@ -239,7 +239,7 @@ foreign import ccall "sqlite3_step"
 --
 -- /Warning:/ If the most recent 'c_sqlite3_step' call failed,
 -- this will return the corresponding error code.
-foreign import ccall "sqlite3_reset"
+foreign import ccall unsafe "sqlite3_reset"
     c_sqlite3_reset :: Ptr CStatement -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/finalize.html>
@@ -498,7 +498,7 @@ foreign import ccall "wrapper"
     mkCWalHook :: CWalHook -> IO (FunPtr CWalHook)
 
 -- | <https://www.sqlite.org/c3ref/blob_open.html>
-foreign import ccall "sqlite3_blob_open"
+foreign import ccall unsafe "sqlite3_blob_open"
     c_sqlite3_blob_open
         :: Ptr CDatabase
         -> CString         -- ^ Database name.
@@ -510,11 +510,11 @@ foreign import ccall "sqlite3_blob_open"
         -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/blob_close.html>
-foreign import ccall "sqlite3_blob_close"
+foreign import ccall unsafe "sqlite3_blob_close"
     c_sqlite3_blob_close :: Ptr CBlob -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/blob_reopen.html>
-foreign import ccall "sqlite3_blob_reopen"
+foreign import ccall unsafe "sqlite3_blob_reopen"
     c_sqlite3_blob_reopen :: Ptr CBlob -> Int64 -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/blob_bytes.html>
@@ -522,11 +522,11 @@ foreign import ccall unsafe "sqlite3_blob_bytes"
     c_sqlite3_blob_bytes :: Ptr CBlob -> IO CInt
 
 -- | <https://www.sqlite.org/c3ref/blob_read.html>
-foreign import ccall "sqlite3_blob_read"
+foreign import ccall unsafe "sqlite3_blob_read"
     c_sqlite3_blob_read :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/blob_write.html>
-foreign import ccall "sqlite3_blob_write"
+foreign import ccall unsafe "sqlite3_blob_write"
     c_sqlite3_blob_write :: Ptr CBlob -> Ptr a -> CInt -> CInt -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupinit>
@@ -543,7 +543,7 @@ foreign import ccall "sqlite3_backup_finish"
     c_sqlite3_backup_finish :: Ptr CBackup -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupstep>
-foreign import ccall "sqlite3_backup_step"
+foreign import ccall unsafe "sqlite3_backup_step"
     c_sqlite3_backup_step :: Ptr CBackup -> CInt -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupremaining>
