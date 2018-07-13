@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
@@ -19,7 +19,7 @@ module Database.SQLite3.Direct (
     setSharedCacheEnabled,
 
     -- * Simple query execution
-    -- | <http://sqlite.org/c3ref/exec.html>
+    -- | <https://sqlite.org/c3ref/exec.html>
     exec,
     execWithCallback,
     ExecCallback,
@@ -28,6 +28,7 @@ module Database.SQLite3.Direct (
     prepare,
     getStatementDatabase,
     step,
+    stepNoCB,
     reset,
     finalize,
     clearBindings,
@@ -41,7 +42,7 @@ module Database.SQLite3.Direct (
     columnName,
 
     -- * Binding values to a prepared statement
-    -- | <http://www.sqlite.org/c3ref/bind_blob.html>
+    -- | <https://www.sqlite.org/c3ref/bind_blob.html>
     bindInt64,
     bindDouble,
     bindText,
@@ -50,7 +51,7 @@ module Database.SQLite3.Direct (
     bindNull,
 
     -- * Reading the result row
-    -- | <http://www.sqlite.org/c3ref/column_blob.html>
+    -- | <https://www.sqlite.org/c3ref/column_blob.html>
     columnType,
     columnInt64,
     columnDouble,
@@ -137,16 +138,14 @@ import Database.SQLite3.Bindings
 
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Unsafe     as BSU
-import qualified Data.List.NonEmpty         as NEL
-import Data.Semigroup       (Semigroup ((<>), sconcat))
+import qualified Data.ByteString.Internal   as BSI
+import Data.Semigroup       (Semigroup)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Control.Applicative  ((<$>))
 import Control.Exception as E
 import Control.Monad        (join, unless)
 import Data.ByteString      (ByteString)
 import Data.IORef
-import Data.Monoid          (Monoid (mempty, mappend, mconcat))
 import Data.String          (IsString(..))
 import Data.Text.Encoding.Error (lenientDecode)
 import Foreign
@@ -171,7 +170,7 @@ data BackupStepResult
 
 -- | A 'ByteString' containing UTF8-encoded text with no NUL characters.
 newtype Utf8 = Utf8 ByteString
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Semigroup, Monoid)
 
 instance Show Utf8 where
     show (Utf8 s) = (show . T.decodeUtf8With lenientDecode) s
@@ -179,15 +178,6 @@ instance Show Utf8 where
 -- | @fromString = Utf8 . 'T.encodeUtf8' . 'T.pack'@
 instance IsString Utf8 where
     fromString = Utf8 . T.encodeUtf8 . T.pack
-
-instance Semigroup Utf8 where
-    Utf8 a <> Utf8 b = Utf8 (BS.append a b)
-    sconcat = Utf8 . BS.concat . NEL.toList . fmap (\(Utf8 s) -> s)
-
-instance Monoid Utf8 where
-    mempty = Utf8 BS.empty
-    mappend = (<>)
-    mconcat = Utf8 . BS.concat . map (\(Utf8 s) -> s)
 
 packUtf8 :: a -> (Utf8 -> a) -> CString -> IO a
 packUtf8 n f cstr | cstr == nullPtr = return n
@@ -213,29 +203,27 @@ wrapNullablePtr :: (Ptr a -> b) -> Ptr a -> Maybe b
 wrapNullablePtr f ptr | ptr == nullPtr = Nothing
                       | otherwise      = Just (f ptr)
 
-type Result a = Either Error a
-
--- Convert a 'CError' to a 'Result', in the common case where
+-- Convert a 'CError' to a 'Either Error', in the common case where
 -- SQLITE_OK signals success and anything else signals an error.
 --
 -- Note that SQLITE_OK == 0.
-toResult :: a -> CError -> Result a
+toResult :: a -> CError -> Either Error a
 toResult a (CError 0) = Right a
 toResult _ code       = Left $ decodeError code
 
 -- Only perform the action if the 'CError' is SQLITE_OK.
-toResultM :: Monad m => m a -> CError -> m (Result a)
-toResultM m (CError 0) = m >>= return . Right
+toResultM :: Monad m => m a -> CError -> m (Either Error a)
+toResultM m (CError 0) = Right <$> m
 toResultM _ code       = return $ Left $ decodeError code
 
-toStepResult :: CError -> Result StepResult
+toStepResult :: CError -> Either Error StepResult
 toStepResult code =
     case decodeError code of
         ErrorRow  -> Right Row
         ErrorDone -> Right Done
         err       -> Left err
 
-toBackupStepResult :: CError -> Result BackupStepResult
+toBackupStepResult :: CError -> Either Error BackupStepResult
 toBackupStepResult code =
     case decodeError code of
         ErrorOK   -> Right BackupOK
@@ -262,7 +250,7 @@ data Backup = Backup Database (Ptr CBackup)
 
 ------------------------------------------------------------------------
 
--- | <http://www.sqlite.org/c3ref/open.html>
+-- | <https://www.sqlite.org/c3ref/open.html>
 open :: Utf8 -> IO (Either (Error, Utf8) Database)
 open (Utf8 path) =
     BS.useAsCString path $ \path' ->
@@ -281,12 +269,12 @@ open (Utf8 path) =
                     then fail "sqlite3_open unexpectedly returned NULL"
                     else return $ Right db
 
--- | <http://www.sqlite.org/c3ref/close.html>
+-- | <https://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO (Either Error ())
 close (Database db) =
     toResult () <$> c_sqlite3_close db
 
--- | <http://www.sqlite.org/c3ref/interrupt.html>
+-- | <https://www.sqlite.org/c3ref/interrupt.html>
 --
 -- Cause any pending operation on the 'Database' handle to stop at its earliest
 -- opportunity.  This simply sets a flag and returns immediately.  It does not
@@ -299,28 +287,39 @@ interrupt :: Database -> IO ()
 interrupt (Database db) =
     c_sqlite3_interrupt db
 
--- | <http://www.sqlite.org/c3ref/errcode.html>
+-- | <https://www.sqlite.org/c3ref/errcode.html>
 errcode :: Database -> IO Error
 errcode (Database db) =
     decodeError <$> c_sqlite3_errcode db
 
--- | <http://www.sqlite.org/c3ref/errcode.html>
+-- | <https://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
 errmsg (Database db) =
-    c_sqlite3_errmsg db >>= packUtf8 (Utf8 BS.empty) id
+    c_sqlite3_errmsg db >>= packUtf8 mempty id
 
-exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
-exec (Database db) (Utf8 sql) =
-    BS.useAsCString sql $ \sql' ->
-    alloca $ \msgPtrOut -> do
-        rc <- c_sqlite3_exec db sql' nullFunPtr nullPtr msgPtrOut
+withErrorMessagePtr :: (Ptr CString -> IO CError) -> IO (Either (Error, Utf8) ())
+withErrorMessagePtr action =
+    alloca $ \msgPtrOut -> mask $ \restore -> do
+        poke msgPtrOut nullPtr
+        rc <- restore (action msgPtrOut)
+            `onException` (peek msgPtrOut >>= c_sqlite3_free)
         case toResult () rc of
             Left err -> do
                 msgPtr <- peek msgPtrOut
-                msg <- packUtf8 (Utf8 BS.empty) id msgPtr
-                c_sqlite3_free msgPtr
-                return $ Left (err, msg)
-            Right () -> return $ Right ()
+                if msgPtr == nullPtr
+                    then return (Left (err, mempty))
+                    else do
+                        len <- BSI.c_strlen msgPtr
+                        fp <- newForeignPtr c_sqlite3_free_p msgPtr
+                        let bs = BSI.fromForeignPtr (castForeignPtr fp) 0 (fromIntegral len)
+                        return (Left (err, Utf8 bs))
+            Right () -> return (Right ())
+
+-- | <https://www.sqlite.org/c3ref/exec.html>
+exec :: Database -> Utf8 -> IO (Either (Error, Utf8) ())
+exec (Database db) (Utf8 sql) =
+    BS.useAsCString sql $ \sql' ->
+        withErrorMessagePtr (c_sqlite3_exec db sql' nullFunPtr nullPtr)
 
 -- | Like 'exec', but invoke the callback for each result row.
 --
@@ -360,23 +359,15 @@ execWithCallback (Database db) (Utf8 sql) cb = do
             cb' values
 
     BS.useAsCString sql $ \sql' ->
-      alloca $ \msgPtrOut ->
-      bracket (mkCExecCallback cExecCallback) freeHaskellFunPtr $
-      \pExecCallback -> do
-        let returnError err = do
-                msgPtr <- peek msgPtrOut
-                msg <- packUtf8 (Utf8 BS.empty) id msgPtr
-                c_sqlite3_free msgPtr
-                return $ Left (err, msg)
-        rc <- c_sqlite3_exec db sql' pExecCallback nullPtr msgPtrOut
-        case toResult () rc of
-            Left ErrorAbort -> do
-                m <- readIORef abortReason
-                case m of
-                    Nothing -> returnError ErrorAbort
-                    Just ex -> throwIO ex
-            Left err -> returnError err
-            Right () -> return $ Right ()
+        bracket (mkCExecCallback cExecCallback) freeHaskellFunPtr $ \pExecCallback -> do
+            e <- withErrorMessagePtr (c_sqlite3_exec db sql' pExecCallback nullPtr)
+            case e of
+                Left r@(ErrorAbort, _) -> do
+                    m <- readIORef abortReason
+                    case m of
+                        Nothing -> return (Left r)
+                        Just ex -> throwIO ex
+                r               -> return r
 
 type ExecCallback
      = ColumnCount    -- ^ Number of columns, which is the number of items in
@@ -387,7 +378,7 @@ type ExecCallback
     -> [Maybe Utf8]   -- ^ List of column values, as returned by 'columnText'.
     -> IO ()
 
--- | <http://www.sqlite.org/c3ref/profile.html>
+-- | <https://www.sqlite.org/c3ref/profile.html>
 --
 -- Enable/disable tracing of SQL execution.  Tracing can be disabled
 -- by setting 'Nothing' as the logger callback.
@@ -405,12 +396,12 @@ setTrace (Database db) logger =
             -- though, since 'setTrace' is mainly for debugging, and is
             -- typically only called once per application invocation.
             cb <- mkCTraceCallback $ \_ctx cStr -> do
-                msg <- packUtf8 (Utf8 BS.empty) id cStr
+                msg <- packUtf8 mempty id cStr
                 output msg
             _ <- c_sqlite3_trace db cb nullPtr
             return ()
 
--- | <http://www.sqlite.org/c3ref/get_autocommit.html>
+-- | <https://www.sqlite.org/c3ref/get_autocommit.html>
 --
 -- Return 'True' if the connection is in autocommit mode, or 'False' if a
 -- transaction started with @BEGIN@ is still active.
@@ -428,17 +419,14 @@ getAutoCommit :: Database -> IO Bool
 getAutoCommit (Database db) =
     (/= 0) <$> c_sqlite3_get_autocommit db
 
-
 -- | <https://www.sqlite.org/c3ref/enable_shared_cache.html>
 --
 -- Enable or disable shared cache for all future connections.
 setSharedCacheEnabled :: Bool -> IO (Either Error ())
 setSharedCacheEnabled val =
-    toResult () <$> c_sqlite3_enable_shared_cache
-        (if val then 1 else 0)
+    toResult () <$> c_sqlite3_enable_shared_cache val
 
-
--- | <http://www.sqlite.org/c3ref/prepare.html>
+-- | <https://www.sqlite.org/c3ref/prepare.html>
 --
 -- If the query contains no SQL statements, this returns
 -- @'Right' 'Nothing'@.
@@ -449,7 +437,7 @@ prepare (Database db) (Utf8 sql) =
             c_sqlite3_prepare_v2 db sql' (-1) statement nullPtr >>=
                 toResultM (wrapNullablePtr Statement <$> peek statement)
 
--- | <http://www.sqlite.org/c3ref/db_handle.html>
+-- | <https://www.sqlite.org/c3ref/db_handle.html>
 getStatementDatabase :: Statement -> IO Database
 getStatementDatabase (Statement stmt) = do
     db <- c_sqlite3_db_handle stmt
@@ -457,12 +445,20 @@ getStatementDatabase (Statement stmt) = do
         then fail $ "sqlite3_db_handle(" ++ show stmt ++ ") returned NULL"
         else return (Database db)
 
--- | <http://www.sqlite.org/c3ref/step.html>
+-- | <https://www.sqlite.org/c3ref/step.html>
 step :: Statement -> IO (Either Error StepResult)
 step (Statement stmt) =
     toStepResult <$> c_sqlite3_step stmt
 
--- | <http://www.sqlite.org/c3ref/reset.html>
+-- | <https://www.sqlite.org/c3ref/step.html>
+--
+-- Faster step for statements that don't callback to Haskell
+-- functions (e.g. by using custom SQL functions).
+stepNoCB :: Statement -> IO (Either Error StepResult)
+stepNoCB (Statement stmt) =
+    toStepResult <$> c_sqlite3_step_unsafe stmt
+
+-- | <https://www.sqlite.org/c3ref/reset.html>
 --
 -- Warning:
 --
@@ -475,7 +471,7 @@ reset :: Statement -> IO (Either Error ())
 reset (Statement stmt) =
     toResult () <$> c_sqlite3_reset stmt
 
--- | <http://www.sqlite.org/c3ref/finalize.html>
+-- | <https://www.sqlite.org/c3ref/finalize.html>
 --
 -- /Warning:/ If the most recent 'step' call failed,
 -- this will return the corresponding error.
@@ -483,14 +479,14 @@ finalize :: Statement -> IO (Either Error ())
 finalize (Statement stmt) =
     toResult () <$> c_sqlite3_finalize stmt
 
--- | <http://www.sqlite.org/c3ref/sql.html>
+-- | <https://www.sqlite.org/c3ref/sql.html>
 --
 -- Return a copy of the original SQL text used to compile the statement.
 statementSql :: Statement -> IO (Maybe Utf8)
 statementSql (Statement stmt) =
     c_sqlite3_sql stmt >>= packUtf8 Nothing Just
 
--- | <http://www.sqlite.org/c3ref/clear_bindings.html>
+-- | <https://www.sqlite.org/c3ref/clear_bindings.html>
 --
 -- Set all parameters in the prepared statement to null.
 clearBindings :: Statement -> IO ()
@@ -498,7 +494,7 @@ clearBindings (Statement stmt) = do
     _ <- c_sqlite3_clear_bindings stmt
     return ()
 
--- | <http://www.sqlite.org/c3ref/bind_parameter_count.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_count.html>
 --
 -- This returns the index of the largest (rightmost) parameter.  Note that this
 -- is not necessarily the number of parameters.  If numbered parameters like
@@ -509,25 +505,25 @@ bindParameterCount :: Statement -> IO ParamIndex
 bindParameterCount (Statement stmt) =
     fromFFI <$> c_sqlite3_bind_parameter_count stmt
 
--- | <http://www.sqlite.org/c3ref/bind_parameter_name.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_name.html>
 bindParameterName :: Statement -> ParamIndex -> IO (Maybe Utf8)
 bindParameterName (Statement stmt) idx =
     c_sqlite3_bind_parameter_name stmt (toFFI idx) >>=
         packUtf8 Nothing Just
 
--- | <http://www.sqlite.org/c3ref/bind_parameter_index.html>
+-- | <https://www.sqlite.org/c3ref/bind_parameter_index.html>
 bindParameterIndex :: Statement -> Utf8 -> IO (Maybe ParamIndex)
 bindParameterIndex (Statement stmt) (Utf8 name) =
     BS.useAsCString name $ \name' -> do
         idx <- fromFFI <$> c_sqlite3_bind_parameter_index stmt name'
         return $ if idx == 0 then Nothing else Just idx
 
--- | <http://www.sqlite.org/c3ref/column_count.html>
+-- | <https://www.sqlite.org/c3ref/column_count.html>
 columnCount :: Statement -> IO ColumnCount
 columnCount (Statement stmt) =
     fromFFI <$> c_sqlite3_column_count stmt
 
--- | <http://www.sqlite.org/c3ref/column_name.html>
+-- | <https://www.sqlite.org/c3ref/column_name.html>
 columnName :: Statement -> ColumnIndex -> IO (Maybe Utf8)
 columnName (Statement stmt) idx =
     c_sqlite3_column_name stmt (toFFI idx) >>=
@@ -586,13 +582,12 @@ columnBlob (Statement stmt) idx = do
     len <- c_sqlite3_column_bytes stmt (toFFI idx)
     packCStringLen ptr len
 
-
--- | <http://www.sqlite.org/c3ref/last_insert_rowid.html>
+-- | <https://www.sqlite.org/c3ref/last_insert_rowid.html>
 lastInsertRowId :: Database -> IO Int64
 lastInsertRowId (Database db) =
     c_sqlite3_last_insert_rowid db
 
--- | <http://www.sqlite.org/c3ref/changes.html>
+-- | <https://www.sqlite.org/c3ref/changes.html>
 --
 -- Return the number of rows that were changed, inserted, or deleted
 -- by the most recent @INSERT@, @DELETE@, or @UPDATE@ statement.
@@ -600,7 +595,7 @@ changes :: Database -> IO Int
 changes (Database db) =
     fromIntegral <$> c_sqlite3_changes db
 
--- | <http://www.sqlite.org/c3ref/total_changes.html>
+-- | <https://www.sqlite.org/c3ref/total_changes.html>
 --
 -- Return the total number of row changes caused by @INSERT@, @DELETE@,
 -- or @UPDATE@ statements since the 'Database' was opened.
@@ -628,7 +623,7 @@ destroyCFuncPtrs = IOU.unsafePerformIO $ mkCFuncDestroy destroy
         freeStablePtr p'
 {-# NOINLINE destroyCFuncPtrs #-}
 
--- | <http://sqlite.org/c3ref/create_function.html>
+-- | <https://sqlite.org/c3ref/create_function.html>
 --
 -- Create a custom SQL function or redefine the behavior of an existing
 -- function.
@@ -732,7 +727,6 @@ maybeArgCount :: Maybe ArgCount -> CArgCount
 maybeArgCount (Just n) = toFFI n
 maybeArgCount Nothing = -1
 
-
 funcArgCount :: FuncArgs -> ArgCount
 funcArgCount (FuncArgs nArgs _) = fromIntegral nArgs
 
@@ -768,7 +762,6 @@ extractFuncArg defVal extract (FuncArgs nArgs p) idx
         extract cval
     | otherwise = return defVal
 
-
 funcResultInt64 :: FuncContext -> Int64 -> IO ()
 funcResultInt64 (FuncContext ctx) value =
     c_sqlite3_result_int64 ctx value
@@ -803,20 +796,19 @@ getFuncContextDatabase (FuncContext ctx) = do
         then fail $ "sqlite3_context_db_handle(" ++ show ctx ++ ") returned NULL"
         else return (Database db)
 
-
--- Deallocate the function pointer to the comparison function used to
+-- | Deallocate the function pointer to the comparison function used to
 -- implement a custom collation
 destroyCCompare :: CFuncDestroy ()
 destroyCCompare ptr = freeHaskellFunPtr ptr'
   where
     ptr' = castPtrToFunPtr ptr :: FunPtr (CCompare ())
 
--- This is called by sqlite so we create one global FunPtr to pass to sqlite
+-- | This is called by sqlite so we create one global FunPtr to pass to sqlite
 destroyCComparePtr :: FunPtr (CFuncDestroy ())
 destroyCComparePtr = IOU.unsafePerformIO $ mkCFuncDestroy destroyCCompare
 {-# NOINLINE destroyCComparePtr #-}
 
--- | <http://www.sqlite.org/c3ref/create_collation.html>
+-- | <https://www.sqlite.org/c3ref/create_collation.html>
 createCollation
     :: Database
     -> Utf8                       -- ^ Name of the collation.
@@ -846,17 +838,16 @@ createCollation (Database db) (Utf8 name) cmp = mask_ $ do
 deleteCollation :: Database -> Utf8 -> IO (Either Error ())
 deleteCollation (Database db) (Utf8 name) =
     BS.useAsCString name $ \namePtr ->
-        toResult () <$> do
+        toResult () <$>
             c_sqlite3_create_collation_v2
                 db namePtr c_SQLITE_UTF8 nullPtr nullFunPtr nullFunPtr
 
--- | <http://www.sqlite.org/c3ref/enable_load_extension.html>
+-- | <https://www.sqlite.org/c3ref/enable_load_extension.html>
 --
 -- Enable or disable extension loading.
 setLoadExtensionEnabled :: Database -> Bool -> IO (Either Error ())
-setLoadExtensionEnabled (Database db) enabled = do
+setLoadExtensionEnabled (Database db) enabled =
     toResult () <$> c_sqlite3_enable_load_extension db enabled
-
 
 -- | <https://www.sqlite.org/c3ref/blob_open.html>
 --
@@ -873,7 +864,7 @@ blobOpen (Database db) (Utf8 zDb) (Utf8 zTable) (Utf8 zColumn) rowid rw =
     BS.useAsCString zDb $ \ptrDb ->
     BS.useAsCString zTable $ \ptrTable ->
     BS.useAsCString zColumn $ \ptrColumn ->
-    alloca $ \ptrBlob -> do
+    alloca $ \ptrBlob ->
         c_sqlite3_blob_open db ptrDb ptrTable ptrColumn rowid flags ptrBlob
             >>= toResultM (Blob (Database db) <$> peek ptrBlob)
   where
@@ -885,7 +876,10 @@ blobClose (Blob _ blob) =
     toResult () <$> c_sqlite3_blob_close blob
 
 -- | <https://www.sqlite.org/c3ref/blob_reopen.html>
-blobReopen :: Blob -> Int64 -> IO (Either Error ())
+blobReopen
+    :: Blob
+    -> Int64 -- ^ The @ROWID@ of the row.
+    -> IO (Either Error ())
 blobReopen (Blob _ blob) rowid =
     toResult () <$> c_sqlite3_blob_reopen blob rowid
 
@@ -897,23 +891,13 @@ blobBytes (Blob _ blob) =
 -- | <https://www.sqlite.org/c3ref/blob_read.html>
 blobRead
     :: Blob
-    -> Int -- ^ Number of bytes to read.
-    -> Int -- ^ Offset within the blob.
+    -> Int  -- ^ Number of bytes to read.
+    -> Int  -- ^ Offset within the blob.
     -> IO (Either Error ByteString)
-blobRead blob len offset =
-    -- we do not use allocaBytes here because it deallocates its buffer
-    -- which would necessitate copying it
-    -- instead we use mallocBytes and mask to ensure both exception
-    -- safety and that the buffer is not copied any times
-    mask $ \restore -> do
-        buf <- mallocBytes len
-        r <- restore (blobReadBuf blob buf len offset)
-            `onException` (free buf)
-        case r of
-            Left err -> free buf >> return (Left err)
-            Right () -> do
-                bs <- BSU.unsafePackCStringFinalizer buf len (free buf)
-                return (Right bs)
+blobRead blob len offset = do
+    fp <- BSI.mallocByteString len
+    fmap (\_ -> BSI.fromForeignPtr fp 0 len) <$>
+        withForeignPtr fp (\p -> blobReadBuf blob p len offset)
 
 blobReadBuf :: Blob -> Ptr a -> Int -> Int -> IO (Either Error ())
 blobReadBuf (Blob _ blob) buf len offset =
@@ -931,12 +915,12 @@ blobWrite (Blob _ blob) bs offset =
         toResult () <$>
             c_sqlite3_blob_write blob buf (fromIntegral len) (fromIntegral offset)
 
-
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupinit>
 backupInit
-    :: Database  -- ^ Destination database handle
-    -> Utf8      -- ^ Destination database name
-    -> Database  -- ^ Source database handle
-    -> Utf8      -- ^ Source database name
+    :: Database  -- ^ Destination database handle.
+    -> Utf8      -- ^ Destination database name.
+    -> Database  -- ^ Source database handle.
+    -> Utf8      -- ^ Source database name.
     -> IO (Either Error Backup)
 backupInit (Database dstDb) (Utf8 dstName) (Database srcDb) (Utf8 srcName) =
     BS.useAsCString dstName $ \dstName' ->
@@ -946,20 +930,27 @@ backupInit (Database dstDb) (Utf8 dstName) (Database srcDb) (Utf8 srcName) =
             then Left <$> errcode (Database dstDb)
             else return (Right (Backup (Database dstDb) r))
 
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupfinish>
 backupFinish :: Backup -> IO (Either Error ())
 backupFinish (Backup _ backup) =
     toResult () <$>
         c_sqlite3_backup_finish backup
 
-backupStep :: Backup -> Int -> IO (Either Error BackupStepResult)
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupstep>
+backupStep
+    :: Backup
+    -> Int    -- ^ Number of pages to copy; if negative, all remaining source pages are copied.
+    -> IO (Either Error BackupStepResult)
 backupStep (Backup _ backup) pages =
     toBackupStepResult <$>
         c_sqlite3_backup_step backup (fromIntegral pages)
 
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupremaining>
 backupRemaining :: Backup -> IO Int
 backupRemaining (Backup _ backup) =
     fromIntegral <$> c_sqlite3_backup_remaining backup
 
+-- | <https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backuppagecount>
 backupPagecount :: Backup -> IO Int
 backupPagecount (Backup _ backup) =
     fromIntegral <$> c_sqlite3_backup_pagecount backup

@@ -1,3 +1,11 @@
+v2.3.24:
+	* Upgrade embedded sqlite3 library to 3.24.0.
+	* Add faster `stepNoCB` function for statements that don't callback to Haskell functions.
+	* Use faster "unsafe" FFI calls for the following functions:
+	  reset, blobOpen, blobClose, blobReopen, blobRead, blobWrite, backupStep, errcode, errmsg
+	  as they are frequently used and don't callback to Haskell functions.
+	* Use faster Haskell memory allocator in blobRead function.
+
 v2.3.23:
 	* Add Semigroup instance to support GHC 8.4.1 (thanks @gwils)
 	* Build clean up for Android support (thanks @kmicklas)

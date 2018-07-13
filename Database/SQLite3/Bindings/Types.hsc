@@ -4,7 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Database.SQLite3.Bindings.Types (
     -- * Objects
-    -- | <http://www.sqlite.org/c3ref/objlist.html>
+    -- | <https://www.sqlite.org/c3ref/objlist.html>
     CDatabase,
     CStatement,
     CValue,
@@ -39,6 +39,7 @@ module Database.SQLite3.Bindings.Types (
     -- * Miscellaneous
     CNumBytes(..),
     CDestructor,
+    c_SQLITE_STATIC,
     c_SQLITE_TRANSIENT,
     c_SQLITE_UTF8,
 
@@ -61,8 +62,9 @@ module Database.SQLite3.Bindings.Types (
 import Foreign.C.Types
 import Foreign.Ptr
 
--- Result code documentation copied from <http://www.sqlite.org/c3ref/c_abort.html>
+-- Result code documentation copied from <https://www.sqlite.org/c3ref/c_abort.html>
 
+-- | <https://www.sqlite.org/c3ref/c_abort.html>
 data Error = ErrorOK                     -- ^ Successful result
            | ErrorError                  -- ^ SQL error or missing database
            | ErrorInternal               -- ^ Internal logic error in SQLite
@@ -90,10 +92,13 @@ data Error = ErrorOK                     -- ^ Successful result
            | ErrorFormat                 -- ^ Auxiliary database format error
            | ErrorRange                  -- ^ 2nd parameter to sqlite3_bind out of range
            | ErrorNotADatabase           -- ^ File opened that is not a database file
+           | ErrorNotice                 -- ^ Notifications from sqlite3_log()
+           | ErrorWarning                -- ^ Warnings from sqlite3_log()
            | ErrorRow                    -- ^ @sqlite3_step()@ has another row ready
            | ErrorDone                   -- ^ @sqlite3_step()@ has finished executing
              deriving (Eq, Show)
 
+-- | <https://www.sqlite.org/c3ref/c_blob.html>
 data ColumnType = IntegerColumn
                 | FloatColumn
                 | TextColumn
@@ -101,22 +106,22 @@ data ColumnType = IntegerColumn
                 | NullColumn
                   deriving (Eq, Show)
 
--- | <http://www.sqlite.org/c3ref/sqlite3.html>
+-- | <https://www.sqlite.org/c3ref/sqlite3.html>
 --
 -- @CDatabase@ = @sqlite3@
 data CDatabase
 
--- | <http://www.sqlite.org/c3ref/stmt.html>
+-- | <https://www.sqlite.org/c3ref/stmt.html>
 --
 -- @CStatement@ = @sqlite3_stmt@
 data CStatement
 
--- | <http://www.sqlite.org/c3ref/value.html>
+-- | <https://www.sqlite.org/c3ref/value.html>
 --
 -- @CValue@ = @sqlite3_value@
 data CValue
 
--- | <http://www.sqlite.org/c3ref/context.html>
+-- | <https://www.sqlite.org/c3ref/context.html>
 --
 -- @CContext@ = @sqlite3_context@
 data CContext
@@ -146,7 +151,7 @@ data CBackup
 -- When you bind a parameter with 'Database.SQLite3.bindSQLData', it assigns a
 -- new value to one of these indices.
 --
--- See <http://www.sqlite.org/lang_expr.html#varparam> for the syntax of
+-- See <https://www.sqlite.org/lang_expr.html#varparam> for the syntax of
 -- parameter placeholders, and how parameter indices are assigned.
 newtype ParamIndex = ParamIndex Int
     deriving (Eq, Ord, Enum, Num, Real, Integral)
@@ -195,10 +200,14 @@ type CColumnCount = CColumnIndex
 newtype CNumBytes = CNumBytes CInt
     deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
 
--- | <http://www.sqlite.org/c3ref/c_static.html>
+-- | <https://www.sqlite.org/c3ref/c_static.html>
 --
 -- @Ptr CDestructor@ = @sqlite3_destructor_type@
 data CDestructor
+
+-- | Tells SQLite3 that the content pointer is constant and will never change
+c_SQLITE_STATIC :: Ptr CDestructor
+c_SQLITE_STATIC = intPtrToPtr 0
 
 -- | Tells SQLite3 to make its own private copy of the data
 c_SQLITE_TRANSIENT :: Ptr CDestructor
@@ -206,7 +215,6 @@ c_SQLITE_TRANSIENT = intPtrToPtr (-1)
 
 c_SQLITE_UTF8 :: CInt
 c_SQLITE_UTF8 = #{const SQLITE_UTF8}
-
 
 -- | Number of arguments of a user defined SQL function.
 newtype ArgCount = ArgCount Int
@@ -238,8 +246,7 @@ instance Bounded CArgCount where
 c_SQLITE_DETERMINISTIC :: CInt
 c_SQLITE_DETERMINISTIC = #{const SQLITE_DETERMINISTIC}
 
-
--- | <http://www.sqlite.org/c3ref/c_abort.html>
+-- | <https://www.sqlite.org/c3ref/c_abort.html>
 newtype CError = CError CInt
     deriving (Eq, Show)
 
@@ -251,7 +258,7 @@ newtype CError = CError CInt
 -- exception you can handle.
 --
 -- Therefore, do not use direct-sqlite with a different version of SQLite than
--- the one bundled (currently, 3.7.13).  If you do, ensure that 'decodeError'
+-- the one bundled (currently, 3.24.0).  If you do, ensure that 'decodeError'
 -- and 'decodeColumnType' are still exhaustive.
 decodeError :: CError -> Error
 decodeError (CError n) = case n of
@@ -282,6 +289,8 @@ decodeError (CError n) = case n of
     #{const SQLITE_FORMAT}     -> ErrorFormat
     #{const SQLITE_RANGE}      -> ErrorRange
     #{const SQLITE_NOTADB}     -> ErrorNotADatabase
+    #{const SQLITE_NOTICE}     -> ErrorNotice
+    #{const SQLITE_WARNING}    -> ErrorWarning
     #{const SQLITE_ROW}        -> ErrorRow
     #{const SQLITE_DONE}       -> ErrorDone
     _                          -> error $ "decodeError " ++ show n
@@ -315,11 +324,12 @@ encodeError err = CError $ case err of
     ErrorFormat             -> #const SQLITE_FORMAT
     ErrorRange              -> #const SQLITE_RANGE
     ErrorNotADatabase       -> #const SQLITE_NOTADB
+    ErrorNotice             -> #const SQLITE_NOTICE
+    ErrorWarning            -> #const SQLITE_WARNING
     ErrorRow                -> #const SQLITE_ROW
     ErrorDone               -> #const SQLITE_DONE
 
-
--- | <http://www.sqlite.org/c3ref/c_blob.html>
+-- | <https://www.sqlite.org/c3ref/c_blob.html>
 newtype CColumnType = CColumnType CInt
     deriving (Eq, Show)
 
