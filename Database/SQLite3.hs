@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Database.SQLite3 (
     -- * Connection management
     open,
@@ -193,6 +194,7 @@ import Data.Text.Encoding   (encodeUtf8, decodeUtf8With)
 import Data.Text.Encoding.Error (UnicodeException(..), lenientDecode)
 import Data.Typeable
 import Foreign.Ptr          (Ptr)
+import GHC.Generics
 
 data SQLData
     = SQLInteger    !Int64
@@ -200,7 +202,7 @@ data SQLData
     | SQLText       !Text
     | SQLBlob       !ByteString
     | SQLNull
-    deriving (Eq, Show, Typeable)
+    deriving (Eq, Show, Typeable, Generic)
 
 -- | Exception thrown when SQLite3 reports an error.
 --
@@ -214,7 +216,7 @@ data SQLError = SQLError
         -- ^ Indicates what action produced this error,
         --   e.g. @exec \"SELECT * FROM foo\"@
     }
-    deriving (Eq, Typeable)
+    deriving (Eq, Typeable, Generic)
 
 -- NB: SQLError is lazy in 'sqlErrorDetails' and 'sqlErrorContext',
 -- to defer message construction in the case where a user catches and
