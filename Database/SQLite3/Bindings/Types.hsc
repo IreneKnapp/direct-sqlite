@@ -2,6 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Database.SQLite3.Bindings.Types (
     -- * Objects
     -- | <https://www.sqlite.org/c3ref/objlist.html>
@@ -59,6 +60,7 @@ module Database.SQLite3.Bindings.Types (
 #include "cbits/sqlite3.h"
 #endif
 
+import GHC.Generics
 import Foreign.C.Types
 import Foreign.Ptr
 
@@ -96,7 +98,7 @@ data Error = ErrorOK                     -- ^ Successful result
            | ErrorWarning                -- ^ Warnings from sqlite3_log()
            | ErrorRow                    -- ^ @sqlite3_step()@ has another row ready
            | ErrorDone                   -- ^ @sqlite3_step()@ has finished executing
-             deriving (Eq, Show)
+             deriving (Eq, Show, Generic)
 
 -- | <https://www.sqlite.org/c3ref/c_blob.html>
 data ColumnType = IntegerColumn
