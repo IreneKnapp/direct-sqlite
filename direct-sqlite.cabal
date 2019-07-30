@@ -1,5 +1,5 @@
 name:               direct-sqlite
-version:            2.3.24
+version:            2.3.25
 synopsis:           Low-level binding to SQLite3.  Includes UTF8 and BLOB support.
 description:        This package is not very different from the other SQLite3 bindings out
                     there, but it fixes a few deficiencies I was finding.  As compared to

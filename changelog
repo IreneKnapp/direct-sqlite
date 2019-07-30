@@ -1,3 +1,6 @@
+v2.3.25:
+	* Upgrade embedded sqlite library to 3.28.0.
+
 v2.3.24:
 	* Upgrade embedded sqlite3 library to 3.24.0.
 	* Add faster `stepNoCB` function for statements that don't callback to Haskell functions.
