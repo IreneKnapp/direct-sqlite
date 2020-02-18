@@ -9,7 +9,6 @@ import Control.Monad        (forM_, liftM3, when)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
 import Data.Typeable
-import Data.Monoid
 import System.Directory     ()
 import System.Exit          (exitFailure)
 import System.IO
