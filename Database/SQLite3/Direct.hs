@@ -1,6 +1,7 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 -- |
 -- This API is a slightly lower-level version of "Database.SQLite3".  Namely:
 --
@@ -134,23 +135,25 @@ module Database.SQLite3.Direct (
     ArgIndex,
 ) where
 
-import Database.SQLite3.Bindings
-
-import qualified Data.ByteString            as BS
-import qualified Data.ByteString.Unsafe     as BSU
-import qualified Data.ByteString.Internal   as BSI
-import Data.Semigroup       (Semigroup)
+import           Control.Exception as E
+import           Control.Monad (join, unless)
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Internal as BSI
+import qualified Data.ByteString.Unsafe as BSU
+import           Data.IORef
+import           Data.String (IsString(..))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Control.Exception as E
-import Control.Monad        (join, unless)
-import Data.ByteString      (ByteString)
-import Data.IORef
-import Data.String          (IsString(..))
-import Data.Text.Encoding.Error (lenientDecode)
-import Foreign
-import Foreign.C
+import           Data.Text.Encoding.Error (lenientDecode)
+import           Database.SQLite3.Bindings
+import           Foreign
+import           Foreign.C
 import qualified System.IO.Unsafe as IOU
+
+#if !MIN_VERSION_base(4,11,0)
+import           Data.Semigroup (Semigroup)
+#endif
 
 newtype Database = Database (Ptr CDatabase)
     deriving (Eq, Show)
@@ -725,7 +728,7 @@ deleteFunction (Database db) (Utf8 name) nArgs =
 
 maybeArgCount :: Maybe ArgCount -> CArgCount
 maybeArgCount (Just n) = toFFI n
-maybeArgCount Nothing = -1
+maybeArgCount Nothing  = -1
 
 funcArgCount :: FuncArgs -> ArgCount
 funcArgCount (FuncArgs nArgs _) = fromIntegral nArgs
