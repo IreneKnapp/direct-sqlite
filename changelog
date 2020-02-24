@@ -1,3 +1,6 @@
+v2.3.26:
+	* Add support for GHC 8.8 and Stackage LTS 15+
+
 v2.3.25:
 	* Upgrade embedded sqlite library to 3.28.0.
 
@@ -173,4 +176,3 @@ v1.1
 
 	* Adds the SQLite amalgamation file (version 3.7.5) to the
 	  project, so that there are no external dependencies.
-
