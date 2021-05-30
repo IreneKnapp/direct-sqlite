@@ -5,7 +5,7 @@ module Database.SQLite3.Bindings (
     -- * Connection management
     c_sqlite3_open,
     c_sqlite3_close,
-    c_sqlite3_errcode,
+    c_sqlite3_extended_errcode,
     c_sqlite3_errmsg,
     c_sqlite3_interrupt,
     c_sqlite3_trace,
@@ -143,8 +143,8 @@ foreign import ccall "sqlite3_close"
     c_sqlite3_close :: Ptr CDatabase -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
-foreign import ccall unsafe "sqlite3_errcode"
-    c_sqlite3_errcode :: Ptr CDatabase -> IO CError
+foreign import ccall unsafe "sqlite3_extended_errcode"
+    c_sqlite3_extended_errcode :: Ptr CDatabase -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 foreign import ccall unsafe "sqlite3_errmsg"
