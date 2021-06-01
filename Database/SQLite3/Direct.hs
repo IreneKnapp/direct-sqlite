@@ -293,7 +293,7 @@ interrupt (Database db) =
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 errcode :: Database -> IO Error
 errcode (Database db) =
-    decodeError <$> c_sqlite3_errcode db
+    decodeError <$> c_sqlite3_extended_errcode db
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
