@@ -723,8 +723,8 @@ testGetAutoCommit TestEnv{..} = TestCase $
     False <- Direct.getAutoCommit conn
     Left (ErrorFull, _) <- Direct.exec conn
         "PRAGMA max_page_count=1; CREATE TABLE foo (a INT)"
-    True <- Direct.getAutoCommit conn
-    Left (ErrorError, _) <- Direct.exec conn "ROLLBACK"
+    False <- Direct.getAutoCommit conn
+    Right () <- Direct.exec conn "ROLLBACK"
 
     return ()
 
