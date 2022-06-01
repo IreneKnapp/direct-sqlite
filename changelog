@@ -1,3 +1,7 @@
+v2.3.27:
+    * Add support for up to GHC 9.2
+	* Upgrade embedded sqlite library to 3.38.5.
+
 v2.3.26:
 	* Add support for GHC 8.8 and Stackage LTS 15+
 

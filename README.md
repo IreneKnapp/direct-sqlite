@@ -11,4 +11,5 @@ For contribtions, please read [contributing guide](CONTRIBUTING.md) before sendi
 
 - [Irene Knapp](https://github.com/nurpax) author
 - [Janne Hellsten](https://github.com/nurpax) long-term maintainer
-- [Sergey Bushnyak](https://github.com/sigrlami) current maintainer
+- [Sergey Bushnyak](https://github.com/sigrlami) long-term maintainer
+- [Joshua Chia](https://github.com/jchia) current maintainer
