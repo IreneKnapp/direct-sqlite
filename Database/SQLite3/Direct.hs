@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns               #-}
-{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 -- |
@@ -150,10 +149,6 @@ import           Database.SQLite3.Bindings
 import           Foreign
 import           Foreign.C
 import qualified System.IO.Unsafe as IOU
-
-#if !MIN_VERSION_base(4,11,0)
-import           Data.Semigroup (Semigroup)
-#endif
 
 newtype Database = Database (Ptr CDatabase)
     deriving (Eq, Show)
