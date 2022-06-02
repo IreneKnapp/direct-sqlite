@@ -5,7 +5,7 @@ import qualified Database.SQLite3.Direct as Direct
 
 import Control.Concurrent
 import Control.Exception
-import Control.Monad        (forM_, liftM3, when)
+import Control.Monad        (forM_, liftM3, unless)
 import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
 import Data.Typeable
@@ -61,9 +61,7 @@ regressionTests =
     , TestLabel "CustomColl"    . testCustomCollation
     , TestLabel "IncrBlobIO"    . testIncrementalBlobIO
     ] ++
-    (if rtsSupportsBoundThreads then
-    [ TestLabel "Interrupt"     . testInterrupt
-    ] else [])
+    [ TestLabel "Interrupt"     . testInterrupt | rtsSupportsBoundThreads ]
 
 featureTests :: [TestEnv -> Test]
 featureTests =
@@ -106,7 +104,7 @@ testExec TestEnv{..} = TestCase $ do
               \INSERT INTO foo VALUES (null, ''); \
               \INSERT INTO foo VALUES (null, 'null'); \
               \INSERT INTO foo VALUES (null, null)"
-    withStmt conn ("SELECT * FROM foo") $ \stmt -> do
+    withStmt conn "SELECT * FROM foo" $ \stmt -> do
       Row <- step stmt
       [SQLFloat 3.5, SQLNull]       <- columns stmt
       Row <- step stmt
@@ -637,7 +635,7 @@ testIntegrity TestEnv{..} = TestCase $ do
 
         True <- test [SQLInteger 0, SQLFloat 0.0, SQLText T.empty, SQLBlob B.empty, SQLNull]
         True <- test [SQLInteger minBound, SQLFloat (-1/0), SQLText "\0", SQLBlob (B8.pack "\0"), SQLNull]
-        True <- test [SQLInteger maxBound, SQLFloat (1/0), SQLText "\1114111", SQLBlob ("\255"), SQLNull]
+        True <- test [SQLInteger maxBound, SQLFloat (1/0), SQLText "\1114111", SQLBlob "\255", SQLNull]
 
         -- SQLite3 turns NaN into SQLNull.
         True <- testWith (\_old new -> new === [SQLNull, SQLNull, SQLNull, SQLNull, SQLNull])
@@ -901,8 +899,8 @@ main = do
   withTempFile "." "direct-sqlite-test-database" $ \tempDbName _hFile -> do
     open (T.pack tempDbName) >>= close
     ok <- runTestGroup tempDbName regressionTests
-    when (not ok) exitFailure
+    unless ok exitFailure
     -- Signal failure if feature tests fail.  I'd rather print a noisy warning
     -- instead, but cabal redirects test output to log files by default.
     ok <- runTestGroup tempDbName featureTests
-    when (not ok) exitFailure
+    unless ok exitFailure
