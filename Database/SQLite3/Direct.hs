@@ -14,6 +14,7 @@ module Database.SQLite3.Direct (
     open2,
     close,
     errcode,
+    extendedErrcode,
     errmsg,
     setTrace,
     getAutoCommit,
@@ -307,6 +308,11 @@ interrupt (Database db) =
 errcode :: Database -> IO Error
 errcode (Database db) =
     decodeError <$> c_sqlite3_errcode db
+
+-- | <https://www.sqlite.org/c3ref/errcode.html>
+extendedErrcode :: Database -> IO Error
+extendedErrcode (Database db) =
+    decodeError <$> c_sqlite3_extended_errcode db
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8

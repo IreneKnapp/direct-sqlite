@@ -182,7 +182,7 @@ testTracing :: forall f. TestEnv f -> Test
 testTracing TestEnv{..} = TestCase $
   withConn $ \conn -> do
     chan <- newChan
-    let logger m = writeChan chan m
+    let logger = writeChan chan
     Direct.setTrace conn (Just logger)
     withStmt conn "SELECT null" $ \stmt -> do
       Row <- step stmt
@@ -511,7 +511,7 @@ testErrors TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
     exec conn "CREATE TABLE foo (n INT UNIQUE)"
     exec conn "INSERT INTO foo VALUES (3)"
-    expectError ErrorConstraint $
+    expectError conn ErrorConstraint ErrorConstraintUnique $
       exec conn "INSERT INTO foo VALUES (3)"
 
     -- Multiple NULLs are allowed when there's a UNIQUE constraint
@@ -519,13 +519,13 @@ testErrors TestEnv{..} = TestCase $ do
     exec conn "INSERT INTO foo VALUES (null)"
 
     exec conn "CREATE TABLE bar (n INT NOT NULL)"
-    expectError ErrorConstraint $
+    expectError conn ErrorConstraint ErrorConstraintNotNull$
       exec conn "INSERT INTO bar VALUES (null)"
 
     withStmt conn "SELECT ?" $ \stmt -> do
       forM_ [-1, 0, 2] $ \i -> do
-        expectError ErrorRange $ bindSQLData stmt i $ SQLInteger 42
-        expectError ErrorRange $ bindSQLData stmt i SQLNull
+        expectError conn ErrorRange ErrorRange $ bindSQLData stmt i $ SQLInteger 42
+        expectError conn ErrorRange ErrorRange $ bindSQLData stmt i SQLNull
       bindSQLData stmt 1 $ SQLInteger 42
       Row <- step stmt
 
@@ -539,8 +539,8 @@ testErrors TestEnv{..} = TestCase $ do
 
     withStmt conn "SELECT 1" $ \stmt -> do
       forM_ [-1, 0, 1, 2] $ \i -> do
-        expectError ErrorRange $ bindSQLData stmt i $ SQLInteger 42
-        expectError ErrorRange $ bindSQLData stmt i SQLNull
+        expectError conn ErrorRange ErrorRange $ bindSQLData stmt i $ SQLInteger 42
+        expectError conn ErrorRange ErrorRange $ bindSQLData stmt i SQLNull
       bind stmt []  -- This should succeed.  Don't whine that there aren't any
                     -- parameters to bind!
       Row <- step stmt
@@ -556,8 +556,8 @@ testErrors TestEnv{..} = TestCase $ do
 
     withStmt conn "SELECT ?5" $ \stmt -> do
       forM_ [-1, 0, 6, 7] $ \i -> do
-        expectError ErrorRange $ bindSQLData stmt i $ SQLInteger 42
-        expectError ErrorRange $ bindSQLData stmt i SQLNull
+        expectError conn ErrorRange ErrorRange $ bindSQLData stmt i $ SQLInteger 42
+        expectError conn ErrorRange ErrorRange $ bindSQLData stmt i SQLNull
       bind stmt $ map SQLInteger [1..5]
         -- This succeeds, even though 1..4 aren't used.
       Row <- step stmt
@@ -580,14 +580,14 @@ testErrors TestEnv{..} = TestCase $ do
       [SQLInteger 1, SQLInteger 2] <- columns stmt
 
       -- "DROP TABLE foo" should fail, now that the statement is running.
-      expectError ErrorLocked $ exec conn "DROP TABLE foo"
+      expectError conn ErrorLocked ErrorLocked $ exec conn "DROP TABLE foo"
       withConnShared $ \conn -> do
-        expectError ErrorBusy $ exec conn "DROP TABLE foo"
+        expectError conn ErrorBusy ErrorBusy $ exec conn "DROP TABLE foo"
 
         -- Apparently, we can pretend to drop the table, but we get ErrorBusy
         -- if we try to actually COMMIT it.
         exec conn "BEGIN; DROP TABLE foo"
-        expectError ErrorBusy $ exec conn "COMMIT"
+        expectError conn ErrorBusy ErrorBusy $ exec conn "COMMIT"
 
         exec conn "ROLLBACK"
 
@@ -598,9 +598,9 @@ testErrors TestEnv{..} = TestCase $ do
       2 <- columnCount stmt
       [SQLInteger 5, SQLInteger 6] <- columns stmt
 
-      expectError ErrorLocked $ exec conn "DROP TABLE foo"
+      expectError conn ErrorLocked ErrorLocked $ exec conn "DROP TABLE foo"
       withConnShared $ \conn ->
-        expectError ErrorBusy $ exec conn "DROP TABLE foo"
+        expectError conn ErrorBusy ErrorBusy $ exec conn "DROP TABLE foo"
 
       Done <- step stmt
       2 <- columnCount stmt
@@ -618,9 +618,13 @@ testErrors TestEnv{..} = TestCase $ do
                   err == ErrorSchema)   -- SQLite 3.6.22
 
   where
-    expectError err io = do
+    expectError conn err extendedErr io = do
       Left SQLError{sqlError = err'} <- try io
-      assertEqual "testErrors: expectError" err err'
+      assertEqual "testErrors: expectExtError" err err'
+      err' <- Direct.errcode conn
+      assertEqual "testErrors: expectExtError errcode" err err'
+      extendedErr' <- Direct.extendedErrcode conn
+      assertEqual "testErrors: expectExtError extendedErrcode" extendedErr extendedErr'
 
     foo123456 conn =
       exec conn "CREATE TABLE foo (a INT, b INT); \
