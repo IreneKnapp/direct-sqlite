@@ -1,3 +1,6 @@
+v2.3.28:
+	* Upgrade embedded sqlite library to 3.41.0.
+
 v2.3.27:
     * Add support for up to GHC 9.2
 	* Upgrade embedded sqlite library to 3.38.5.
