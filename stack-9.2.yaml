@@ -1,1 +1,2 @@
-resolver: nightly-2022-06-14
+resolver: lts-20.11
+compiler: ghc-9.2.6
