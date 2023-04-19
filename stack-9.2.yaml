@@ -1,2 +1,1 @@
-resolver: lts-20.11
-compiler: ghc-9.2.6
+resolver: lts-20.18
