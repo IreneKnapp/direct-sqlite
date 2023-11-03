@@ -53,6 +53,10 @@ flag mathfunctions
   default:     False
   description: Enable built-in mathematical functions
 
+flag dbstat
+  default:     True
+  description: Enable dbstat virtual table
+
 library
   exposed-modules:    Database.SQLite3
                       Database.SQLite3.Bindings
@@ -92,6 +96,9 @@ library
 
     if flag(mathfunctions)
       cc-options: -DSQLITE_ENABLE_MATH_FUNCTIONS
+
+    if flag(dbstat)
+      cc-options: -DSQLITE_ENABLE_DBSTAT_VTAB
 
 test-suite test
   type:               exitcode-stdio-1.0
