@@ -232,6 +232,7 @@ data SQLOpenFlag
     | SQLOpenPrivateCache  -- Ok for sqlite3_open_v2()
     | SQLOpenWAL           -- VFS only
     | SQLOpenNoFollow      -- Ok for sqlite3_open_v2()
+    | SQLOpenExResCode     -- Extended result codes
     deriving (Eq, Show)
 
 -- | These VFS names are used when using the `open2` function.
@@ -371,6 +372,7 @@ open2 path flags zvfs =
         toNum SQLOpenPrivateCache   = 0x00040000
         toNum SQLOpenWAL            = 0x00080000
         toNum SQLOpenNoFollow       = 0x01000000
+        toNum SQLOpenExResCode      = 0x02000000
 
 -- | <https://www.sqlite.org/c3ref/close.html>
 close :: Database -> IO ()

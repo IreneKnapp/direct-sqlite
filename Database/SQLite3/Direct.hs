@@ -16,6 +16,7 @@ module Database.SQLite3.Direct (
     errcode,
     extendedErrcode,
     errmsg,
+    setExtendedResultCodes,
     setTrace,
     getAutoCommit,
     setSharedCacheEnabled,
@@ -313,6 +314,11 @@ errcode (Database db) =
 extendedErrcode :: Database -> IO Error
 extendedErrcode (Database db) =
     decodeError <$> c_sqlite3_extended_errcode db
+
+-- | <https://www.sqlite.org/c3ref/extended_result_codes.html>
+setExtendedResultCodes :: Database -> Bool -> IO (Either Error ())
+setExtendedResultCodes (Database db) enabled =
+    toResult () <$> c_sqlite3_extended_result_codes db enabled
 
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 errmsg :: Database -> IO Utf8
