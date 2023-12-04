@@ -55,6 +55,7 @@ regressionTests1 =
     , TestLabel "TypedColumns"  . testTypedColumns
     , TestLabel "ColumnName"    . testColumnName
     , TestLabel "Errors"        . testErrors
+    , TestLabel "ExtendedErrors". testExtendedErrors
     , TestLabel "Integrity"     . testIntegrity
     , TestLabel "DecodeError"   . testDecodeError
     , TestLabel "ResultStats"   . testResultStats
@@ -631,6 +632,38 @@ testErrors TestEnv{..} = TestCase $ do
                 \INSERT INTO foo VALUES (1, 2); \
                 \INSERT INTO foo VALUES (3, 4); \
                 \INSERT INTO foo VALUES (5, 6)"
+
+testExtendedErrors :: forall f . TestEnv f -> Test
+testExtendedErrors TestEnv{..} = TestCase $ do
+  -- opening a connection with extended results mode
+  conn <- open2 ":memory:" [SQLOpenReadWrite, SQLOpenCreate, SQLOpenExResCode] SQLVFSDefault
+  exec conn "CREATE TABLE foo (a INT NOT NULL, b INT);"
+  res <- Direct.exec conn "INSERT INTO foo (a, b) VALUES (NULL, 0);"
+  case res of
+    Left err ->
+      assertEqual "testExtendedErrors: expected an extended error code, but got the wrong error code" err
+        (ErrorConstraintNotNull, "NOT NULL constraint failed: foo.a")
+    Right () ->
+      assertFailure "testExtendedErrors: exec should have return extended error code, but succeeded"
+  close conn
+
+  -- setting a connection to extended results mode after it's opened
+  withConn $ \conn -> do
+    exec conn "CREATE TABLE foo (a INT UNIQUE);"
+    exec conn "INSERT INTO foo (a) VALUES (1);"
+
+    res <- Direct.exec conn "INSERT INTO foo (a) VALUES (1);"
+    assertEqual "testExtendedErrors: expected a primary error code" res
+      (Left (ErrorConstraint, "UNIQUE constraint failed: foo.a"))
+
+    res2 <- Direct.setExtendedResultCodes conn True
+    case res2 of
+      Left err -> assertFailure $
+        "testExtendedErrors: failed to enable extended result codes, got error " <> show err
+      Right () -> do
+        res3 <- Direct.exec conn "INSERT INTO foo (a) VALUES (1);"
+        assertEqual "testExtendedErrors: expected an extended error code" res3
+          (Left (ErrorConstraintUnique, "UNIQUE constraint failed: foo.a"))
 
 -- Make sure data stored in a table comes back as-is.
 testIntegrity :: forall f. TestEnv f -> Test

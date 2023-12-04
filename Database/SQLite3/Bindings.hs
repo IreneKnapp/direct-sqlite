@@ -9,6 +9,7 @@ module Database.SQLite3.Bindings (
     c_sqlite3_errcode,
     c_sqlite3_extended_errcode,
     c_sqlite3_errmsg,
+    c_sqlite3_extended_result_codes,
     c_sqlite3_interrupt,
     c_sqlite3_trace,
     CTraceCallback,
@@ -165,6 +166,10 @@ foreign import ccall unsafe "sqlite3_extended_errcode"
 -- | <https://www.sqlite.org/c3ref/errcode.html>
 foreign import ccall unsafe "sqlite3_errmsg"
     c_sqlite3_errmsg :: Ptr CDatabase -> IO CString
+
+-- | <https://www.sqlite.org/c3ref/extended_result_codes.html>
+foreign import ccall unsafe "sqlite3_extended_result_codes"
+    c_sqlite3_extended_result_codes :: Ptr CDatabase -> Bool -> IO CError
 
 -- | <https://www.sqlite.org/c3ref/interrupt.html>
 foreign import ccall "sqlite3_interrupt"
