@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Database.SQLite3 (
     -- * Connection management
+    withDatabase,
     open,
     open2,
     close,
@@ -325,6 +326,12 @@ checkErrorMsg fn result = case result of
 
 appendShow :: Show a => Text -> a -> Text
 appendShow txt a = txt `T.append` (T.pack . show) a
+
+-- | Manage a connection to a database in an exception-safe way (with 'bracket')
+withDatabase :: Text -- ^ connection string
+             -> (Database -> IO a) -- ^ user program
+             -> IO a
+withDatabase path = bracket (open path) close
 
 -- | <https://www.sqlite.org/c3ref/open.html>
 open :: Text -> IO Database
