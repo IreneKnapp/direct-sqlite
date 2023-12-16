@@ -17,6 +17,7 @@ module Database.SQLite3 (
     ExecCallback,
 
     -- * Statement management
+    withStatement,
     prepare,
     prepareUtf8,
     step,
@@ -465,6 +466,13 @@ type ExecCallback
                       --   for every row.
     -> [Maybe Text]   -- ^ List of column values, as returned by 'columnText'.
     -> IO ()
+
+-- | Bracket 'prepare' and 'finalize'. Useful for stepping multiple times through a 'Statement'
+withStatement :: Database -- ^ DB connection
+              -> Text -- ^ SQL statement
+              -> (Statement -> IO a) -- ^ User program
+              -> IO a
+withStatement db sql = bracket (prepare db sql) finalize
 
 -- | <https://www.sqlite.org/c3ref/prepare.html>
 --
