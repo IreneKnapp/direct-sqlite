@@ -8,7 +8,6 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad        (forM_, liftM3, unless)
 import Data.Functor.Identity
-import Data.Text            (Text)
 import Data.Text.Encoding.Error (UnicodeException(..))
 import Data.Typeable
 import System.Directory     ()
@@ -93,9 +92,6 @@ shouldFail action = do
     Left e  -> return $ isUserError e
     Right _ -> return False
 
-withStmt :: Database -> Text -> (Statement -> IO a) -> IO a
-withStmt conn sql = bracket (prepare conn sql) finalize
-
 testExec :: forall f. TestEnv f -> Test
 testExec TestEnv{..} = TestCase $ do
   exec conn ""
@@ -116,7 +112,7 @@ testExec TestEnv{..} = TestCase $ do
               \INSERT INTO foo VALUES (null, ''); \
               \INSERT INTO foo VALUES (null, 'null'); \
               \INSERT INTO foo VALUES (null, null)"
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       Row <- step stmt
       [SQLFloat 3.5, SQLNull]       <- columns stmt
       Row <- step stmt
@@ -185,14 +181,14 @@ testTracing TestEnv{..} = TestCase $
     chan <- newChan
     let logger = writeChan chan
     Direct.setTrace conn (Just logger)
-    withStmt conn "SELECT null" $ \stmt -> do
+    withStatement conn "SELECT null" $ \stmt -> do
       Row <- step stmt
       res <- columns stmt
       Done <- step stmt
       assertEqual "tracing" [SQLNull] res
       Direct.Utf8 msg <- readChan chan
       assertEqual "tracing" "SELECT null" msg
-    withStmt conn "SELECT 1+?" $ \stmt -> do
+    withStatement conn "SELECT 1+?" $ \stmt -> do
       bind stmt [SQLInteger 2]
       Row <- step stmt
       Done <- step stmt
@@ -230,19 +226,19 @@ testPrepare TestEnv{..} = TestCase $ do
   True <- shouldFail $ prepare conn ""
   True <- shouldFail $ prepare conn ";"
   withConn $ \conn -> do
-    withStmt conn
+    withStatement conn
              "CREATE TABLE foo (a INT, b INT); \
              \INSERT INTO foo VALUES (1, 2); \
              \INSERT INTO foo VALUES (3, 4)"
              $ \stmt -> do
       Done <- step stmt
       return ()
-    withStmt conn
+    withStatement conn
              "BEGIN; INSERT INTO foo VALUES (5, 6); COMMIT"
              $ \stmt -> do
       Done <- step stmt
       return ()
-    withStmt conn
+    withStatement conn
              "SELECT * FROM foo"
              $ \stmt -> do
       Done <- step stmt -- No row was inserted, because only the CREATE TABLE
@@ -339,7 +335,7 @@ testBindErrorValidation TestEnv{..} = TestCase $ do
 testNamedBindParams :: forall f. TestEnv f -> Test
 testNamedBindParams TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
-    withStmt conn "SELECT :foo / :bar" $ \stmt -> do
+    withStatement conn "SELECT :foo / :bar" $ \stmt -> do
       -- Test that we get something back for known names
       Just fooIdx <- Direct.bindParameterIndex stmt ":foo"
       Just barIdx <- Direct.bindParameterIndex stmt ":bar"
@@ -352,7 +348,7 @@ testNamedBindParams TestEnv{..} = TestCase $ do
       [SQLInteger 2] <- columns stmt
       Done <- step stmt
       return ()
-    withStmt conn "SELECT @n1+@n2" $ \stmt -> do
+    withStatement conn "SELECT @n1+@n2" $ \stmt -> do
       -- Test that we get something back for known names
       Just _n1 <- Direct.bindParameterIndex stmt "@n1"
       Just _n2 <- Direct.bindParameterIndex stmt "@n2"
@@ -361,7 +357,7 @@ testNamedBindParams TestEnv{..} = TestCase $ do
       Nothing <- Direct.bindParameterIndex stmt ":n1"
       Nothing <- Direct.bindParameterIndex stmt ":n2"
       return ()
-    withStmt conn "SELECT :foo / :bar,:t" $ \stmt -> do
+    withStatement conn "SELECT :foo / :bar,:t" $ \stmt -> do
       bindNamed stmt [(":t", SQLText "txt"), (":foo", SQLInteger 6), (":bar", SQLInteger 2)]
       Row <- step stmt
       2 <- columnCount stmt
@@ -372,20 +368,20 @@ testNamedBindParams TestEnv{..} = TestCase $ do
 testColumns :: forall f. TestEnv f -> Test
 testColumns TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
-    withStmt conn "CREATE TABLE foo (a INT)" command
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "CREATE TABLE foo (a INT)" command
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       1 <- columnCount stmt
       exec conn "ALTER TABLE foo ADD COLUMN b INT"
       Done <- step stmt
       2 <- columnCount stmt
       return ()
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       2 <- columnCount stmt
       Done <- step stmt
       2 <- columnCount stmt
       return ()
-    withStmt conn "INSERT INTO foo VALUES (1, 2)" command
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "INSERT INTO foo VALUES (1, 2)" command
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       2 <- columnCount stmt
       Row <- step stmt
       2 <- columnCount stmt
@@ -393,9 +389,9 @@ testColumns TestEnv{..} = TestCase $ do
       Done <- step stmt
       2 <- columnCount stmt
       return ()
-    withStmt conn "INSERT INTO foo VALUES (3, 4)" command
-    withStmt conn "INSERT INTO foo VALUES (5, 6)" command
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "INSERT INTO foo VALUES (3, 4)" command
+    withStatement conn "INSERT INTO foo VALUES (5, 6)" command
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       2 <- columnCount stmt
       exec conn "ALTER TABLE foo ADD COLUMN c INT"
       Row <- step stmt
@@ -428,10 +424,10 @@ testColumns TestEnv{..} = TestCase $ do
 testTypedColumns :: forall f. TestEnv f -> Test
 testTypedColumns TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
-    withStmt conn "CREATE TABLE foo (a INT, b INT)" command
-    withStmt conn "INSERT INTO foo VALUES (1, 2)" command
-    withStmt conn "INSERT INTO foo VALUES (3, 4)" command
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "CREATE TABLE foo (a INT, b INT)" command
+    withStatement conn "INSERT INTO foo VALUES (1, 2)" command
+    withStatement conn "INSERT INTO foo VALUES (3, 4)" command
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       Row <- step stmt
       2 <- columnCount stmt
       [SQLInteger 1, SQLInteger 2] <- typedColumns stmt [Nothing, Nothing]
@@ -441,7 +437,7 @@ testTypedColumns TestEnv{..} = TestCase $ do
       Done <- step stmt
       2 <- columnCount stmt
       return ()
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       Row <- step stmt
       2 <- columnCount stmt
       [SQLText "1", SQLText "2"] <- typedColumns stmt [Just TextColumn, Just TextColumn]
@@ -464,7 +460,7 @@ testColumnName TestEnv{..} = TestCase $ do
     exec conn "CREATE TABLE foo (id INTEGER PRIMARY KEY, abc TEXT, \"123\" REAL, über INT)"
     exec conn "INSERT INTO foo (abc, \"123\", über) VALUES ('hello', 3.14, 456)"
 
-    withStmt conn "SELECT id AS id, abc AS x, \"123\" AS y, über AS ü FROM foo"
+    withStatement conn "SELECT id AS id, abc AS x, \"123\" AS y, über AS ü FROM foo"
       $ \stmt -> do
       let checkNames = do
               4 <- columnCount stmt
@@ -486,7 +482,7 @@ testColumnName TestEnv{..} = TestCase $ do
 
     -- Column names without AS clauses may change in future versions of SQLite.
     -- This test will fail if they do.
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       4 <- columnCount stmt
       Nothing     <- columnName stmt (-1)
       Just "id"   <- columnName stmt 0
@@ -523,7 +519,7 @@ testErrors TestEnv{..} = TestCase $ do
     expectError conn ErrorConstraint ErrorConstraintNotNull$
       exec conn "INSERT INTO bar VALUES (null)"
 
-    withStmt conn "SELECT ?" $ \stmt -> do
+    withStatement conn "SELECT ?" $ \stmt -> do
       forM_ [-1, 0, 2] $ \i -> do
         expectError conn ErrorRange ErrorRange $ bindSQLData stmt i $ SQLInteger 42
         expectError conn ErrorRange ErrorRange $ bindSQLData stmt i SQLNull
@@ -538,7 +534,7 @@ testErrors TestEnv{..} = TestCase $ do
       SQLInteger 42 <- column stmt 0
       return ()
 
-    withStmt conn "SELECT 1" $ \stmt -> do
+    withStatement conn "SELECT 1" $ \stmt -> do
       forM_ [-1, 0, 1, 2] $ \i -> do
         expectError conn ErrorRange ErrorRange $ bindSQLData stmt i $ SQLInteger 42
         expectError conn ErrorRange ErrorRange $ bindSQLData stmt i SQLNull
@@ -548,14 +544,14 @@ testErrors TestEnv{..} = TestCase $ do
       SQLInteger 1 <- column stmt 0
       return ()
 
-    withStmt conn "SELECT :bar" $ \stmt -> do
+    withStatement conn "SELECT :bar" $ \stmt -> do
       shouldFail $ bindNamed stmt [(":missing", SQLInteger 42)]
       bindNamed stmt [(":bar", SQLInteger 1)]
       Row <- step stmt
       SQLInteger 1 <- column stmt 0
       return ()
 
-    withStmt conn "SELECT ?5" $ \stmt -> do
+    withStatement conn "SELECT ?5" $ \stmt -> do
       forM_ [-1, 0, 6, 7] $ \i -> do
         expectError conn ErrorRange ErrorRange $ bindSQLData stmt i $ SQLInteger 42
         expectError conn ErrorRange ErrorRange $ bindSQLData stmt i SQLNull
@@ -570,7 +566,7 @@ testErrors TestEnv{..} = TestCase $ do
   -- throw SQLITE_ABORT.
   withConnShared $ \conn -> do
     foo123456 conn
-    withStmt conn "SELECT * FROM foo" $ \stmt -> do
+    withStatement conn "SELECT * FROM foo" $ \stmt -> do
       -- "DROP TABLE foo" should succeed, since the statement
       -- isn't running yet.
       exec conn "DROP TABLE foo"
@@ -670,8 +666,8 @@ testIntegrity :: forall f. TestEnv f -> Test
 testIntegrity TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
     exec conn "CREATE TABLE foo (i INT, f FLOAT, t TEXT, b BLOB, n TEXT)"
-    withStmt conn "INSERT INTO foo VALUES (?, ?, ?, ?, ?)" $ \insert ->
-      withStmt conn "SELECT * FROM foo" $ \select -> do
+    withStatement conn "INSERT INTO foo VALUES (?, ?, ?, ?, ?)" $ \insert ->
+      withStatement conn "SELECT * FROM foo" $ \select -> do
         let test = testWith (===)
 
             testWith f values = do
@@ -700,7 +696,7 @@ testIntegrity TestEnv{..} = TestCase $ do
 
 testDecodeError :: forall f. TestEnv f -> Test
 testDecodeError TestEnv{..} = TestCase $ do
-  withStmt conn "SELECT ?" $ \stmt -> do
+  withStatement conn "SELECT ?" $ \stmt -> do
     Right () <- Direct.bindText stmt 1 invalidUtf8
     Row <- step stmt
     Left (DecodeError "Database.SQLite3.columnText: Invalid UTF-8" _)
@@ -711,12 +707,12 @@ testDecodeError TestEnv{..} = TestCase $ do
   -- data to a table on disk and reading it back.
   withConnShared $ \conn -> do
     exec conn "CREATE TABLE testDecodeError (a TEXT)"
-    withStmt conn "INSERT INTO testDecodeError VALUES (?)" $ \stmt -> do
+    withStatement conn "INSERT INTO testDecodeError VALUES (?)" $ \stmt -> do
       Right () <- Direct.bindText stmt 1 invalidUtf8
       Done <- step stmt
       return ()
   withConnShared $ \conn -> do
-    withStmt conn "SELECT * FROM testDecodeError" $ \stmt -> do
+    withStatement conn "SELECT * FROM testDecodeError" $ \stmt -> do
       Row <- step stmt
       TextColumn <- columnType stmt 0
       txt <- Direct.columnText stmt 0
@@ -776,7 +772,7 @@ testGetAutoCommit TestEnv{..} = TestCase $
 testStatementSql :: forall f. TestEnv f -> Test
 testStatementSql TestEnv{..} = TestCase $ do
   let q1 = "SELECT 1+1"
-  withStmt conn q1 $ \stmt -> do
+  withStatement conn q1 $ \stmt -> do
     Just (Direct.Utf8 sql1) <- Direct.statementSql stmt
     T.encodeUtf8 q1 @=? sql1
 
@@ -784,7 +780,7 @@ testCustomFunction :: forall f. TestEnv f -> Test
 testCustomFunction TestEnv{..} = TestCase $ do
   withConn $ \conn -> do
     createFunction conn "repeat" (Just 2) True repeatString
-    withStmt conn "SELECT repeat(3,'abc')" $ \stmt -> do
+    withStatement conn "SELECT repeat(3,'abc')" $ \stmt -> do
       Row <- step stmt
       [SQLText "abcabcabc"] <- columns stmt
       Done <- step stmt
@@ -818,7 +814,7 @@ testCustomAggragate TestEnv{..} = TestCase $ do
     exec conn "CREATE TABLE tbl (n INT)"
     exec conn "INSERT INTO tbl(n) VALUES (12), (-3), (7)"
     createAggregate conn "mysum" (Just 1) 0 mySumStep funcResultInt64
-    withStmt conn "SELECT mysum(n) FROM tbl" $ \stmt -> do
+    withStatement conn "SELECT mysum(n) FROM tbl" $ \stmt -> do
       Row <- step stmt
       [SQLInteger 16] <- columns stmt
       Done <- step stmt
@@ -838,7 +834,7 @@ testCustomCollation TestEnv{..} = TestCase $ do
     exec conn "CREATE TABLE tbl (n TEXT)"
     exec conn "INSERT INTO tbl(n) VALUES ('dog'),('mouse'),('ox'),('cat')"
     createCollation conn "len" cmpLen
-    withStmt conn "SELECT * FROM tbl ORDER BY n COLLATE len" $ \stmt -> do
+    withStatement conn "SELECT * FROM tbl ORDER BY n COLLATE len" $ \stmt -> do
       Row <- step stmt
       [SQLText "ox"] <- columns stmt
       Row <- step stmt
@@ -869,7 +865,7 @@ testIncrementalBlobIO TestEnv{..} = TestCase $ do
     assertEqual "blobRead" "cdef" s
     blobWrite blob "BC" 1
     blobClose blob
-    withStmt conn "SELECT n FROM tbl" $ \stmt -> do
+    withStatement conn "SELECT n FROM tbl" $ \stmt -> do
       Row <- step stmt
       s' <- columnBlob stmt 0
       assertEqual "blobWrite" "aBCdefg" s'
@@ -879,7 +875,7 @@ testInterrupt TestEnv{..} = TestCase $
   withConn $ \conn -> do
     exec conn "CREATE TABLE tbl (n INT)"
 
-    withStmt conn "INSERT INTO tbl VALUES (?)" $ \stmt -> do
+    withStatement conn "INSERT INTO tbl VALUES (?)" $ \stmt -> do
       exec conn "BEGIN"
       forM_ [1..200] $ \i -> do
           reset stmt
@@ -913,7 +909,7 @@ testMultiRowInsert TestEnv{..} = TestCase $ do
       Right () -> do
         -- Make sure multi-row insert actually worked
         2 <- changes conn
-        withStmt conn "SELECT * FROM foo" $ \stmt -> do
+        withStatement conn "SELECT * FROM foo" $ \stmt -> do
           Row <- step stmt
           [SQLInteger 1, SQLInteger 2] <- columns stmt
           Row <- step stmt
