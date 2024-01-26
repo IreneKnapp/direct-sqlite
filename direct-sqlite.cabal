@@ -12,12 +12,12 @@ license-file:       LICENSE
 copyright:          Copyright (c) 2012 - 2014 Irene Knapp,
                     2014 - 2018 Janne Hellsten,
                     2018 - 2020 Sergey Bushnyak,
-                    2022        Joshua Chia
+                    2022 - 2024 Joshua Chia
 author:             Irene Knapp <irene.knapp@icloud.com>
 maintainer:         Joshua Chia <joshchia@gmail.com>
 category:           Database
 homepage:           https://github.com/IreneKnapp/direct-sqlite
-bug-reports:        https://github.com/IreneKnapp/direct-sqlite/issues/new
+bug-reports:        https://github.com/IreneKnapp/direct-sqlite/issues
 build-type:         Simple
 extra-source-files: cbits/sqlite3.c
                     cbits/sqlite3.h
