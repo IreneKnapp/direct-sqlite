@@ -27,6 +27,12 @@ module Database.SQLite3.Bindings.Types (
     encodeColumnType,
     ColumnType(..),
 
+    -- ** ActionCode
+    CActionCode(..),
+    decodeActionCode,
+    encodeActionCode,
+    ActionCode(..),
+
     -- * Indices
     ParamIndex(..),
     ColumnIndex(..),
@@ -183,6 +189,42 @@ data ColumnType = IntegerColumn
                 | BlobColumn
                 | NullColumn
                   deriving (Eq, Show)
+
+-- | <https://www.sqlite.org/c3ref/c_alter_table.html>
+data ActionCode = CreateIndexAction
+                | CreateTableAction
+                | CreateTempIndexAction
+                | CreateTempTableAction
+                | CreateTempTriggerAction
+                | CreateTempViewAction
+                | CreateTriggerAction
+                | CreateViewAction
+                | DeleteAction
+                | DropIndexAction
+                | DropTableAction
+                | DropTempIndexAction
+                | DropTempTableAction
+                | DropTempTriggerAction
+                | DropTempViewAction
+                | DropTriggerAction
+                | DropViewAction
+                | InsertAction
+                | PragmaAction
+                | ReadAction
+                | SelectAction
+                | TransactionAction
+                | UpdateAction
+                | AttachAction
+                | DetachAction
+                | AlterTableAction
+                | ReindexAction
+                | AnalyzeAction
+                | CreateVtableAction
+                | DropVtableAction
+                | FunctionAction
+                | SavepointAction
+                | CopyAction
+                | RecursiveAction
 
 -- | <https://www.sqlite.org/c3ref/sqlite3.html>
 --
@@ -580,6 +622,85 @@ encodeColumnType t = CColumnType $ case t of
     BlobColumn    -> #const SQLITE_BLOB
     NullColumn    -> #const SQLITE_NULL
 
+-- | <https://www.sqlite.org/c3ref/c_alter_table.html>
+newtype CActionCode =  CActionCode CInt
+    deriving (Eq, Show)
+
+decodeActionCode :: CActionCode -> ActionCode
+decodeActionCode (CActionCode n) = case n of
+    #{const SQLITE_CREATE_INDEX}        -> CreateIndexAction
+    #{const SQLITE_CREATE_TABLE}        -> CreateTableAction
+    #{const SQLITE_CREATE_TEMP_INDEX}   -> CreateTempIndexAction
+    #{const SQLITE_CREATE_TEMP_TABLE}   -> CreateTempTableAction
+    #{const SQLITE_CREATE_TEMP_TRIGGER} -> CreateTempTriggerAction
+    #{const SQLITE_CREATE_TEMP_VIEW}    -> CreateTempViewAction
+    #{const SQLITE_CREATE_TRIGGER}      -> CreateTriggerAction
+    #{const SQLITE_CREATE_VIEW}         -> CreateViewAction
+    #{const SQLITE_DELETE}              -> DeleteAction
+    #{const SQLITE_DROP_INDEX}          -> DropIndexAction
+    #{const SQLITE_DROP_TABLE}          -> DropTableAction
+    #{const SQLITE_DROP_TEMP_INDEX}     -> DropTempIndexAction
+    #{const SQLITE_DROP_TEMP_TABLE}     -> DropTempTableAction
+    #{const SQLITE_DROP_TEMP_TRIGGER}   -> DropTempTriggerAction
+    #{const SQLITE_DROP_TEMP_VIEW}      -> DropTempViewAction
+    #{const SQLITE_DROP_TRIGGER}        -> DropTriggerAction
+    #{const SQLITE_DROP_VIEW}           -> DropViewAction
+    #{const SQLITE_INSERT}              -> InsertAction
+    #{const SQLITE_PRAGMA}              -> PragmaAction
+    #{const SQLITE_READ}                -> ReadAction
+    #{const SQLITE_SELECT}              -> SelectAction
+    #{const SQLITE_TRANSACTION}         -> TransactionAction
+    #{const SQLITE_UPDATE}              -> UpdateAction
+    #{const SQLITE_ATTACH}              -> AttachAction
+    #{const SQLITE_DETACH}              -> DetachAction
+    #{const SQLITE_ALTER_TABLE}         -> AlterTableAction
+    #{const SQLITE_REINDEX}             -> ReindexAction
+    #{const SQLITE_ANALYZE}             -> AnalyzeAction
+    #{const SQLITE_CREATE_VTABLE}       -> CreateVtableAction
+    #{const SQLITE_DROP_VTABLE}         -> DropVtableAction
+    #{const SQLITE_FUNCTION}            -> FunctionAction
+    #{const SQLITE_SAVEPOINT}           -> SavepointAction
+    #{const SQLITE_COPY}                -> CopyAction
+    #{const SQLITE_RECURSIVE}           -> RecursiveAction
+    _                                   -> error $ "decodeActionCode " ++ show n
+
+encodeActionCode :: ActionCode -> CActionCode
+encodeActionCode t = CActionCode $ case t of
+    CreateIndexAction       -> #const SQLITE_CREATE_INDEX
+    CreateTableAction       -> #const SQLITE_CREATE_TABLE
+    CreateTempIndexAction   -> #const SQLITE_CREATE_TEMP_INDEX
+    CreateTempTableAction   -> #const SQLITE_CREATE_TEMP_TABLE
+    CreateTempTriggerAction -> #const SQLITE_CREATE_TEMP_TRIGGER
+    CreateTempViewAction    -> #const SQLITE_CREATE_TEMP_VIEW
+    CreateTriggerAction     -> #const SQLITE_CREATE_TRIGGER
+    CreateViewAction        -> #const SQLITE_CREATE_VIEW
+    DeleteAction            -> #const SQLITE_DELETE
+    DropIndexAction         -> #const SQLITE_DROP_INDEX
+    DropTableAction         -> #const SQLITE_DROP_TABLE
+    DropTempIndexAction     -> #const SQLITE_DROP_TEMP_INDEX
+    DropTempTableAction     -> #const SQLITE_DROP_TEMP_TABLE
+    DropTempTriggerAction   -> #const SQLITE_DROP_TEMP_TRIGGER
+    DropTempViewAction      -> #const SQLITE_DROP_TEMP_VIEW
+    DropTriggerAction       -> #const SQLITE_DROP_TRIGGER
+    DropViewAction          -> #const SQLITE_DROP_VIEW
+    InsertAction            -> #const SQLITE_INSERT
+    PragmaAction            -> #const SQLITE_PRAGMA
+    ReadAction              -> #const SQLITE_READ
+    SelectAction            -> #const SQLITE_SELECT
+    TransactionAction       -> #const SQLITE_TRANSACTION
+    UpdateAction            -> #const SQLITE_UPDATE
+    AttachAction            -> #const SQLITE_ATTACH
+    DetachAction            -> #const SQLITE_DETACH
+    AlterTableAction        -> #const SQLITE_ALTER_TABLE
+    ReindexAction           -> #const SQLITE_REINDEX
+    AnalyzeAction           -> #const SQLITE_ANALYZE
+    CreateVtableAction      -> #const SQLITE_CREATE_VTABLE
+    DropVtableAction        -> #const SQLITE_DROP_VTABLE
+    FunctionAction          -> #const SQLITE_FUNCTION
+    SavepointAction         -> #const SQLITE_SAVEPOINT
+    CopyAction              -> #const SQLITE_COPY
+    RecursiveAction         -> #const SQLITE_RECURSIVE
+
 ------------------------------------------------------------------------
 -- Conversion to and from FFI types
 
@@ -606,6 +727,10 @@ instance FFIType Error CError where
 instance FFIType ColumnType CColumnType where
     toFFI = encodeColumnType
     fromFFI = decodeColumnType
+
+instance FFIType ActionCode CActionCode where
+    toFFI = encodeActionCode
+    fromFFI = decodeActionCode
 
 instance FFIType ArgCount CArgCount where
     toFFI (ArgCount n)  = CArgCount (fromIntegral n)

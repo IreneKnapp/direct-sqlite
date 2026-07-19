@@ -1,6 +1,7 @@
 import StrictEq
 
 import Database.SQLite3
+import qualified Database.SQLite3.Bindings as Bindings
 import qualified Database.SQLite3.Direct as Direct
 
 import Control.Applicative
@@ -10,6 +11,7 @@ import Control.Monad        (forM_, liftM3, unless)
 import Data.Functor.Identity
 import Data.Text.Encoding.Error (UnicodeException(..))
 import Data.Typeable
+import Foreign.Ptr
 import System.Directory     ()
 import System.Exit          (exitFailure)
 import System.IO
@@ -77,6 +79,7 @@ regressionTests2 = regressionTests1 <> [TestLabel "ReadOnly" . testReadOnly]
 featureTests :: forall f. [TestEnv f -> Test]
 featureTests =
     [ TestLabel "MultiRowInsert" . testMultiRowInsert
+    , TestLabel "UpdateHook" . testUpdateHook
     ]
 
 assertFail :: IO a -> Assertion
@@ -916,6 +919,20 @@ testMultiRowInsert TestEnv{..} = TestCase $ do
           [SQLInteger 3, SQLInteger 4] <- columns stmt
           Done <- step stmt
           return ()
+
+testUpdateHook :: forall f. TestEnv f -> Test
+testUpdateHook TestEnv{..} = TestCase $ do
+    m <- newMVar (1 :: Int)
+    withConn $ \conn@(Direct.Database db) -> do
+        exec conn "CREATE TABLE foo (a Int)"
+        h <- Bindings.mkCUpdateHook (\_ _ _ _ _ -> modifyMVar_ m (pure . succ))
+        Bindings.c_sqlite3_update_hook db h nullPtr
+        exec conn "INSERT INTO foo VALUES (1)"
+    r <- readMVar m
+    case r of
+        2 -> pure ()
+        _ -> assertFailure "Update hook did not fire"
+
 
 withTestEnv1 :: String -> (forall f. TestEnv f -> IO a) -> IO a
 withTestEnv1 tempDbName cb =

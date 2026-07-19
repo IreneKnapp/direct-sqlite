@@ -112,6 +112,11 @@ module Database.SQLite3.Bindings (
     CWalHook,
     mkCWalHook,
 
+    -- * Data Change Notification Callbacks
+    c_sqlite3_update_hook,
+    CUpdateHook,
+    mkCUpdateHook,
+
     -- * Incremental blob I/O
     c_sqlite3_blob_open,
     c_sqlite3_blob_close,
@@ -522,6 +527,15 @@ type CWalHook = Ptr () -> Ptr CDatabase -> CString -> CInt -> IO CError
 
 foreign import ccall "wrapper"
     mkCWalHook :: CWalHook -> IO (FunPtr CWalHook)
+
+-- | <https://www.sqlite.org/c3ref/update_hook.html>
+foreign import ccall unsafe "sqlite3_update_hook"
+    c_sqlite3_update_hook :: Ptr CDatabase -> FunPtr CUpdateHook -> Ptr a -> IO (Ptr ())
+
+type CUpdateHook = Ptr () -> CInt -> CString -> CString -> Int64 -> IO ()
+
+foreign import ccall "wrapper"
+    mkCUpdateHook :: CUpdateHook -> IO (FunPtr CUpdateHook)
 
 -- | <https://www.sqlite.org/c3ref/blob_open.html>
 foreign import ccall unsafe "sqlite3_blob_open"
