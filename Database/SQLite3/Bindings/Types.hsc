@@ -328,16 +328,12 @@ c_SQLITE_DETERMINISTIC = #{const SQLITE_DETERMINISTIC}
 newtype CError = CError CInt
     deriving (Eq, Show)
 
--- | Note that this is a partial function.  If the error code is invalid, or
--- perhaps introduced in a newer version of SQLite but this library has not
--- been updated to support it, the result is undefined.
+-- | Calls 'error' if passed a 'CError' containing an invalid or unsupported
+-- SQLite result code.
 --
--- To be clear, if 'decodeError' fails, it is /undefined behavior/, not an
--- exception you can handle.
---
--- Therefore, do not use direct-sqlite with a different version of SQLite than
--- the one bundled (currently, 3.24.0).  If you do, ensure that 'decodeError'
--- and 'decodeColumnType' are still exhaustive.
+-- When using the @systemlib@ Cabal flag, a newer system SQLite library may
+-- produce 'CError' values containing result codes that direct-sqlite does not
+-- recognize.
 decodeError :: CError -> Error
 decodeError (CError n) = case n of
     #{const SQLITE_OK}         -> ErrorOK
@@ -561,8 +557,12 @@ encodeError err = CError $ case err of
 newtype CColumnType = CColumnType CInt
     deriving (Eq, Show)
 
--- | Note that this is a partial function.
--- See 'decodeError' for more information.
+-- | Calls 'error' if passed a 'CColumnType' containing an invalid or
+-- unsupported SQLite column-type code.
+--
+-- When using the @systemlib@ Cabal flag, a newer system SQLite library may
+-- produce 'CColumnType' values containing column-type codes that direct-sqlite
+-- does not recognize.
 decodeColumnType :: CColumnType -> ColumnType
 decodeColumnType (CColumnType n) = case n of
     #{const SQLITE_INTEGER} -> IntegerColumn

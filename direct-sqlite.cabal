@@ -33,7 +33,10 @@ source-repository head
 
 flag systemlib
   default:     False
-  description: Use the system-wide sqlite library
+  description:
+    Use the system SQLite library instead of the bundled one.
+    WARNING: An older system version may lack build-time definitions, while a
+    newer one may return unrecognized values.
 
 flag fulltextsearch
   default:     True
