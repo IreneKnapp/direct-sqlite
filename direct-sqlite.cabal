@@ -83,7 +83,7 @@ library
     install-includes: sqlite3.h, sqlite3ext.h
     include-dirs:     cbits
 
-    if !os(windows) && !os(android)
+    if !os(windows) && !os(android) && !arch(wasm32)
       extra-libraries: pthread
 
     if flag(fulltextsearch)
